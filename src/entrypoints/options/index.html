@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>languageReactor2Anki - Settings</title>
+    <style>
+      :root { color-scheme: light dark; }
+      body {
+        font-family: -apple-system, system-ui, sans-serif;
+        max-width: 560px; margin: 0 auto; padding: 24px; line-height: 1.5;
+      }
+      h1 { font-size: 20px; margin: 0 0 4px; }
+      p.sub { margin: 0 0 20px; color: #888; font-size: 13px; }
+      .field { margin: 14px 0; }
+      label { display: block; font-weight: 600; margin-bottom: 4px; font-size: 14px; }
+      input[type="text"], select {
+        width: 100%; padding: 8px 10px; font-size: 14px;
+        border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box;
+      }
+      .check { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 14px; }
+      .check input { width: 18px; height: 18px; }
+      .hint { font-weight: 400; color: #888; font-size: 12px; margin-top: 2px; }
+      .row { display: flex; gap: 12px; align-items: center; margin-top: 20px; }
+      button {
+        padding: 9px 18px; font-size: 14px; font-weight: 600; cursor: pointer;
+        background: #2a7f62; color: #fff; border: none; border-radius: 6px;
+      }
+      button:disabled { opacity: .6; cursor: default; }
+      #status { font-size: 13px; }
+      #status.ok { color: #2e7d32; }
+      #status.err { color: #c62828; }
+    </style>
+  </head>
+  <body>
+    <h1>languageReactor2Anki</h1>
+    <p class="sub">Settings for saving Chinese vocabulary to Anki.</p>
+
+    <div class="field">
+      <label for="ankiUrl">AnkiConnect URL</label>
+      <input type="text" id="ankiUrl" placeholder="http://127.0.0.1:8765" />
+    </div>
+
+    <div class="field">
+      <label for="deckName">Deck</label>
+      <input type="text" id="deckName" placeholder="Chinese::Language Reactor" />
+      <div class="hint">:: creates subdecks. Card types go to ::Reading / ::Translating / ::Listening.</div>
+    </div>
+
+    <div class="field">
+      <label for="modelName">Note type</label>
+      <input type="text" id="modelName" placeholder="Language Reactor Chinese" />
+      <div class="hint">Leave as is unless you know Anki note types. Using an existing note type's name adds fields to it and overwrites its styling.</div>
+    </div>
+
+    <div class="field">
+      <label class="check"><input type="checkbox" id="toneColors" /> Pinyin tone colors</label>
+      <div class="hint">Color syllables by tone (Pleco scheme). Applies to all cards of the note type.</div>
+    </div>
+
+    <div class="field">
+      <label class="check"><input type="checkbox" id="tts" /> TTS pronunciation</label>
+      <div class="hint">Anki's built-in text-to-speech on the cards.</div>
+    </div>
+
+    <div class="row">
+      <button id="save">Save</button>
+      <span id="status"></span>
+    </div>
+
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>
