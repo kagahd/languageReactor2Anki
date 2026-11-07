@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Detect whether code-relevant files changed. Doc-only changes (README,
+      # docs/, LICENSE, ...) skip the heavy steps below, but the job still
+      # succeeds so the required "build" check is always reported.
+      - uses: dorny/paths-filter@v3
+        id: changes
+        with:
+          filters: |
+            code:
+              - 'src/**'
+              - 'public/**'
+              - 'package.json'
+              - 'package-lock.json'
+              - 'wxt.config.ts'
+              - 'tsconfig.json'
+              - 'vitest.config.ts'
+              - '.github/workflows/ci.yml'
+
+      - if: steps.changes.outputs.code == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - if: steps.changes.outputs.code == 'true'
+        run: npm ci
+      - if: steps.changes.outputs.code == 'true'
+        run: npm run compile
+      - if: steps.changes.outputs.code == 'true'
+        run: npm test
+      - if: steps.changes.outputs.code == 'true'
+        run: npm run build
