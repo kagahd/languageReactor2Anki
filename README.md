@@ -69,9 +69,18 @@ The same cards after syncing, in light and dark mode:
 In Anki: `Tools > Add-ons > Get Add-ons…`, enter code `2055492159`, restart Anki. Keep Anki running
 while adding cards.
 
-### 2. Load the extension
-Build the extension as described in [DEVELOPER.md](DEVELOPER.md), then in `chrome://extensions` enable
-**Developer mode**, click **Load unpacked**, and select the `.output/chrome-mv3` folder.
+### 2. Install the extension
+Pick whichever fits you:
+
+- **From a release zip (no build needed):** download the latest `...-chrome.zip` from the
+  [Releases](https://github.com/kagahd/languageReactor2Anki/releases) page and unzip it. Then in
+  `chrome://extensions` enable **Developer mode**, click **Load unpacked**, and select the unzipped
+  folder.
+- **Build it yourself:** see [DEVELOPER.md](DEVELOPER.md), then load the `.output/chrome-mv3` folder
+  the same way (Developer mode → Load unpacked).
+
+(A one-click Chrome Web Store install is planned; until then, loading unpacked requires Developer
+mode.)
 
 ### 3. Grant AnkiConnect access
 On first use, Anki shows an "Allow connection" popup — click **Yes**. The origin is then remembered.
@@ -127,6 +136,17 @@ Saving re-applies the note type styling to Anki immediately (if Anki is reachabl
 
 See [DEVELOPER.md](DEVELOPER.md) for architecture, build scripts, tests, the input-cleaning details,
 and how to maintain the extension when Language Reactor changes.
+
+## Disclaimer
+
+This extension is for **personal language-learning use**. It reads what Language Reactor already
+displays in your browser and, at your request, copies small snippets (a word, its translation, the
+current sentence) into your own Anki collection. It does **not** redistribute any YouTube or
+Language Reactor content, and it sends no data to the author.
+
+Please respect the Terms of Service of YouTube and Language Reactor. If you redistribute this tool or
+use it commercially, review those terms and your local copyright law first. This project is not
+affiliated with or endorsed by Language Reactor, YouTube/Google, or Anki.
 
 ## Licenses
 
