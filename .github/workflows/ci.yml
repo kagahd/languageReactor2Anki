@@ -41,11 +41,20 @@ jobs:
           # catches force-push reversions). --no-renames so a deleted source
           # path is listed too. -z gives NUL-delimited, unquoted filenames.
           FILES=()
+          DIFF_FILE="$(mktemp)"
           if [ "$EVENT" = "pull_request" ]; then
-            mapfile -d '' FILES < <(git diff --name-only -z --no-renames "${BASE}...${HEAD}")
+            DIFF_ARGS=("${BASE}...${HEAD}")
           else
-            mapfile -d '' FILES < <(git diff --name-only -z --no-renames "${BASE}" "${HEAD}")
+            DIFF_ARGS=("${BASE}" "${HEAD}")
           fi
+          if ! git diff --name-only -z --no-renames "${DIFF_ARGS[@]}" > "$DIFF_FILE"; then
+            rm -f "$DIFF_FILE"
+            echo "diff unavailable - running full pipeline"
+            echo "code=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          mapfile -d '' FILES < "$DIFF_FILE"
+          rm -f "$DIFF_FILE"
 
           echo "Changed files:"; printf '  %s\n' "${FILES[@]}"
 
