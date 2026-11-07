@@ -13,32 +13,54 @@ jobs:
         with:
           fetch-depth: 0
 
-      # Detect whether code-relevant files changed (native git, no third-party
-      # action). Doc-only changes (README, docs/, LICENSE, ...) skip the heavy
-      # steps below, but the job still succeeds so the required "build" check is
-      # always reported.
+      # Decide whether code-relevant files changed (native git, no third-party
+      # action). Doc-only changes skip the heavy steps below, but the job still
+      # succeeds so the required "build" check is always reported.
       - id: changes
+        env:
+          EVENT: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          PUSH_AFTER: ${{ github.sha }}
         run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            BASE="${{ github.event.pull_request.base.sha }}"
-            HEAD="${{ github.event.pull_request.head.sha }}"
+          set -u
+          if [ "$EVENT" = "pull_request" ]; then
+            BASE="$PR_BASE"; HEAD="$PR_HEAD"
           else
-            BASE="${{ github.event.before }}"
-            HEAD="${{ github.sha }}"
+            BASE="$PUSH_BEFORE"; HEAD="$PUSH_AFTER"
           fi
+
           if ! git cat-file -e "${BASE}^{commit}" 2>/dev/null; then
             echo "base commit unavailable - running full pipeline"
             echo "code=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          FILES="$(git diff --name-only "${BASE}...${HEAD}")"
-          echo "Changed files:"; echo "$FILES"
-          if echo "$FILES" | grep -qE '^(src/|public/|package\.json|package-lock\.json|wxt\.config\.ts|tsconfig\.json|vitest\.config\.ts|\.github/workflows/ci\.yml)'; then
-            echo "code=true" >> "$GITHUB_OUTPUT"
+
+          # PR: three-dot (changes vs merge base). Push: two endpoints (also
+          # catches force-push reversions). --no-renames so a deleted source
+          # path is listed too. -z gives NUL-delimited, unquoted filenames.
+          FILES=()
+          if [ "$EVENT" = "pull_request" ]; then
+            mapfile -d '' FILES < <(git diff --name-only -z --no-renames "${BASE}...${HEAD}")
           else
-            echo "code=false (doc-only) - skipping build/tests"
-            echo "code=false" >> "$GITHUB_OUTPUT"
+            mapfile -d '' FILES < <(git diff --name-only -z --no-renames "${BASE}" "${HEAD}")
           fi
+
+          echo "Changed files:"; printf '  %s\n' "${FILES[@]}"
+
+          code=false
+          for f in "${FILES[@]}"; do
+            case "$f" in
+              src/*|public/*|package.json|package-lock.json|wxt.config.ts|tsconfig.json|vitest.config.ts|.github/workflows/ci.yml)
+                code=true
+                break
+                ;;
+            esac
+          done
+
+          echo "code=$code"
+          echo "code=$code" >> "$GITHUB_OUTPUT"
 
       - if: steps.changes.outputs.code == 'true'
         uses: actions/setup-node@v4
