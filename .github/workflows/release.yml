@@ -19,7 +19,7 @@ permissions:
 # false so an in-flight release is never aborted mid-publish; a queued run only
 # starts afterwards and then finds the release already exists and skips.
 concurrency:
-  group: release
+  group: release-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
