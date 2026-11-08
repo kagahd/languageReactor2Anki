@@ -6,7 +6,11 @@ import {
   keepPinyin,
   looksLikePinyin,
   splitPinyinTranslation,
+  stripInvisible,
 } from './sanitize';
+
+// Zero-width space LR mixes between syllables (it does not match \s).
+const ZWSP = String.fromCharCode(0x200b); // U+200B ZERO WIDTH SPACE
 
 describe('keepHanzi', () => {
   it('removes latin/pinyin, keeps only Hanzi', () => {
@@ -76,6 +80,21 @@ describe('splitPinyinTranslation', () => {
     const r = splitPinyinTranslation('wǒ shì Something', 0);
     expect(r.pinyin).toBe('wǒ shì');
     expect(r.translation).toBe('Something');
+  });
+  it('splits correctly when LR glues zero-width spaces onto a syllable', () => {
+    // Regression: U+200B before "zi" used to make the 9th syllable fail the
+    // pinyin check, cutting the split short and spilling pinyin into German.
+    const line = `hái zi yǒu le zì jǐ de hái ${ZWSP}${ZWSP}${ZWSP}${ZWSP}zi de shí hòu Wenn das Kind selbst ein Kind hat`;
+    const r = splitPinyinTranslation(line, 12);
+    expect(r.pinyin).toBe('hái zi yǒu le zì jǐ de hái zi de shí hòu');
+    expect(r.translation).toBe('Wenn das Kind selbst ein Kind hat');
+  });
+});
+
+describe('stripInvisible', () => {
+  it('removes zero-width characters but keeps normal text', () => {
+    expect(stripInvisible(`hái${ZWSP}${ZWSP}zi`)).toBe('háizi');
+    expect(stripInvisible('hái zi')).toBe('hái zi');
   });
 });
 

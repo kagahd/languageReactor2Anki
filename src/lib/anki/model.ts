@@ -168,10 +168,10 @@ h1, h2, h3, h4, p { font-weight: normal; margin: 0; }
 .pinyin { font-size: 24px; color: #5c5c99; margin: 4px 0; }
 .night_mode .pinyin { color: #a6a6ec; }
 
-.bedeutung { font-size: 22px; color: #5e8a5e; margin: 6px 0; }
-.night_mode .bedeutung { color: #9bd49b; }
-.bedeutung-prompt { font-size: 30px; color: #5e8a5e; margin: 28px 0; }
-.night_mode .bedeutung-prompt { color: #9bd49b; }
+.bedeutung { font-size: 22px; color: #bf6a00; margin: 6px 0; }
+.night_mode .bedeutung { color: #e0a35a; }
+.bedeutung-prompt { font-size: 30px; color: #bf6a00; margin: 28px 0; }
+.night_mode .bedeutung-prompt { color: #e0a35a; }
 
 .hint-line { margin: 12px 0; }
 a.hint { color: #9a9a4d; text-decoration: none; font-size: 20px; }
@@ -232,8 +232,8 @@ a.hint { color: #9a9a4d; text-decoration: none; font-size: 20px; }
 .night_mode .satz-hanzi { color: #e39a9a; }
 .satz-pinyin { font-size: 15px; color: #5c5c99; }
 .night_mode .satz-pinyin { color: #a6a6ec; }
-.satz-trans { font-size: 15px; color: #5e8a5e; margin-top: 3px; }
-.night_mode .satz-trans { color: #9bd49b; }
+.satz-trans { font-size: 15px; color: #bf6a00; margin-top: 3px; }
+.night_mode .satz-trans { color: #e0a35a; }
 
 .frequenz { font-size: 11px; color: #a8a89a; margin-bottom: 6px; }
 

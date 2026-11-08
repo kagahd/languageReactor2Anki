@@ -2,14 +2,24 @@
 // in die Hanzi-/Uebersetzungszeile mischt. Bewusst DOM-frei und ohne Seiteneffekte,
 // damit sie als Unit-Tests pruefbar sind (siehe sanitize.test.ts).
 
+/**
+ * Entfernt unsichtbare Null-Breite-/Steuerzeichen, die LR zwischen die Silben
+ * mischt (U+200B..U+200F Zero-Width/Richtungsmarken, U+2060 Word Joiner,
+ * U+FEFF BOM). Sie matchen `\s` NICHT, haengen sich sonst an eine Pinyin-Silbe
+ * und zerbrechen die Tokenisierung (die Silbe gilt dann nicht mehr als Pinyin).
+ */
+export function stripInvisible(s: string): string {
+  return s.replace(/[\u200B-\u200F\u2060\uFEFF]/g, '');
+}
+
 /** Behaelt nur CJK-Ideogramme und CJK-/Vollbreiten-Satzzeichen. */
 export function keepHanzi(s: string): string {
-  return s.replace(/[^㐀-鿿　-〿＀-￯]/g, '').trim();
+  return stripInvisible(s).replace(/[^㐀-鿿　-〿＀-￯]/g, '').trim();
 }
 
 /** Entfernt CJK-Zeichen (laesst Latein/Pinyin/Toene stehen). */
 export function keepPinyin(s: string): string {
-  return s
+  return stripInvisible(s)
     .replace(/[㐀-鿿　-〿＀-￯]/g, '')
     .replace(/\s+/g, ' ')
     .trim();
@@ -36,7 +46,10 @@ export function splitPinyinTranslation(
   line: string,
   hanziCount: number,
 ): { pinyin: string; translation: string } {
-  const cleaned = line.replace(/\s+/g, ' ').trim().replace(/^[㐀-鿿　-〿＀-￯\s]+/u, '');
+  const cleaned = stripInvisible(line)
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/^[㐀-鿿　-〿＀-￯\s]+/u, '');
   const words = cleaned.split(' ').filter(Boolean);
   const cap = hanziCount > 0 ? hanziCount : words.length;
   let n = 0;
@@ -50,7 +63,7 @@ export function splitPinyinTranslation(
 
 /** Schneidet fuehrende CJK und fuehrende Pinyin-Silben (die des Satzes) ab. */
 export function cleanTranslation(raw: string, pinyin: string): string {
-  let t = raw.replace(/\s+/g, ' ').trim();
+  let t = stripInvisible(raw).replace(/\s+/g, ' ').trim();
   t = t.replace(/^[㐀-鿿　-〿＀-￯\s]+/, '');
   const py = new Set(pinyin.split(/\s+/).filter(Boolean));
   if (py.size) {
