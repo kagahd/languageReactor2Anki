@@ -65,20 +65,28 @@ jobs:
         run: |
           # No concurrency guard, so several version bumps in quick succession
           # each publish their own version (a concurrency group would cancel
-          # pending runs and drop a version). Try to create the release; if that
-          # fails the release already exists - either a concurrent run for the
-          # same version won the race, or an earlier run created it but failed
-          # before attaching the asset. In both cases upload our freshly built
-          # asset with --clobber, so we never accept a release that is missing
-          # its asset. If the release genuinely does not exist, the upload fails
-          # too and the step errors out (real failure, surfaced).
+          # pending runs and drop a version). Create the release+tag with the
+          # freshly built asset. If create fails, the release already exists:
+          #   - a concurrent run for the SAME version won the race, or
+          #   - an earlier run left a broken (assetless) release.
+          # We must NOT clobber an existing asset: it was built from the tagged
+          # commit, while ours may come from a different same-version commit, so
+          # overwriting it would make the asset mismatch the tag. So: if the
+          # asset is already attached we are done (the concurrent winner's asset
+          # stays untouched); only if it is entirely missing do we attach our
+          # freshly built one (nothing to overwrite then) to repair a release
+          # left behind by a create that failed mid-upload.
           if ! gh release create "v$VERSION" \
               .output/*-chrome.zip \
               --repo "$GITHUB_REPOSITORY" \
               --target "$GITHUB_SHA" \
               --title "v$VERSION" \
               --generate-notes; then
-            echo "gh release create failed - release likely exists; ensuring the asset is attached."
-            gh release upload "v$VERSION" .output/*-chrome.zip \
-              --repo "$GITHUB_REPOSITORY" --clobber
+            if gh release view "v$VERSION" --repo "$GITHUB_REPOSITORY" \
+                 --json assets --jq '.assets[].name' 2>/dev/null | grep -q -- '-chrome.zip'; then
+              echo "Release v$VERSION already exists with its asset (won by a concurrent run) - nothing to do."
+            else
+              echo "Release v$VERSION exists without its asset - attaching the freshly built one."
+              gh release upload "v$VERSION" .output/*-chrome.zip --repo "$GITHUB_REPOSITORY"
+            fi
           fi
