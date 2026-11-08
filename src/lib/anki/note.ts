@@ -106,7 +106,24 @@ function invalidateSetup(): void {
  * Orchestriert das Anlegen einer Karte: Setup (gecacht) + Note anlegen.
  * Wirft AnkiConnectError bei Problemen (inkl. Dubletten).
  */
-export async function addCard(card: VocabCard, settings: Settings): Promise<AddCardResult> {
+// Serialize adds so the duplicate check and the insert form one critical section:
+// two concurrent ADD_CARD messages must not both pass the check and then insert.
+let addQueue: Promise<unknown> = Promise.resolve();
+
+export function addCard(card: VocabCard, settings: Settings): Promise<AddCardResult> {
+  const run = addQueue.then(
+    () => addCardImpl(card, settings),
+    () => addCardImpl(card, settings),
+  );
+  // Keep the chain alive regardless of this call's outcome.
+  addQueue = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  return run;
+}
+
+async function addCardImpl(card: VocabCard, settings: Settings): Promise<AddCardResult> {
   const { ankiUrl, deckName } = settings;
 
   await ensureSetup(settings);
@@ -168,7 +185,10 @@ async function isDuplicate(
   settings: Settings,
 ): Promise<boolean> {
   const { ankiUrl, modelName } = settings;
-  const query = `note:"${modelName}" "Hanzi:${fields.Hanzi}"`;
+  // Escape search-string delimiters; the model name is user-editable and may
+  // contain quotes or backslashes that would otherwise break the query.
+  const esc = (s: string) => s.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  const query = `"note:${esc(modelName)}" "Hanzi:${esc(fields.Hanzi ?? '')}"`;
   const ids = await ankiInvoke<number[]>('findNotes', { query }, ankiUrl);
   if (ids.length === 0) return false;
 
