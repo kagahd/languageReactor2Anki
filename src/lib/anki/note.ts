@@ -133,11 +133,9 @@ async function addCardImpl(card: VocabCard, settings: Settings): Promise<AddCard
 
   // Skip identical duplicates: same word AND same meaning/sentence. Differences
   // in source timestamp, frequency or stroke data do not count as "different".
-  try {
-    if (await isDuplicate(fields, settings)) return { duplicate: true };
-  } catch (e) {
-    console.warn('[lr2anki] Duplicate check failed, adding anyway:', e);
-  }
+  // If the lookup itself fails, propagate the error instead of inserting blind -
+  // otherwise a transient failure could create a duplicate.
+  if (await isDuplicate(fields, settings)) return { duplicate: true };
 
   // Strichfolge-Daten offline einbetten (gecacht pro Zeichen).
   // Fehlschlaege hier sind nicht kritisch - die Karte wird trotzdem angelegt.
