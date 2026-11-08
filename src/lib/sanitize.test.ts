@@ -11,6 +11,8 @@ import {
 
 // Zero-width space LR mixes between syllables (it does not match \s).
 const ZWSP = String.fromCharCode(0x200b); // U+200B ZERO WIDTH SPACE
+// BOM / zero-width no-break space - this one DOES match \s in JavaScript.
+const BOM = String.fromCharCode(0xfeff); // U+FEFF
 
 describe('keepHanzi', () => {
   it('removes latin/pinyin, keeps only Hanzi', () => {
@@ -89,12 +91,22 @@ describe('splitPinyinTranslation', () => {
     expect(r.pinyin).toBe('hái zi yǒu le zì jǐ de hái zi de shí hòu');
     expect(r.translation).toBe('Wenn das Kind selbst ein Kind hat');
   });
+  it('treats U+FEFF as a separator, not a character to delete', () => {
+    // Regression: U+FEFF matches \s in JS, so it must stay and be normalized to a
+    // space (keeping tokens apart) rather than be stripped (which would merge them).
+    const r = splitPinyinTranslation(`wǒ shì${BOM}Ich bin ein Neuling.`, 2);
+    expect(r.pinyin).toBe('wǒ shì');
+    expect(r.translation).toBe('Ich bin ein Neuling.');
+  });
 });
 
 describe('stripInvisible', () => {
   it('removes zero-width characters but keeps normal text', () => {
     expect(stripInvisible(`hái${ZWSP}${ZWSP}zi`)).toBe('háizi');
     expect(stripInvisible('hái zi')).toBe('hái zi');
+  });
+  it('does NOT remove U+FEFF (it is whitespace, handled by \\s normalization)', () => {
+    expect(stripInvisible(`shì${BOM}Ich`)).toBe(`shì${BOM}Ich`);
   });
 });
 

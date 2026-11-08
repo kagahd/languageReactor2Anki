@@ -4,12 +4,17 @@
 
 /**
  * Entfernt unsichtbare Null-Breite-/Steuerzeichen, die LR zwischen die Silben
- * mischt (U+200B..U+200F Zero-Width/Richtungsmarken, U+2060 Word Joiner,
- * U+FEFF BOM). Sie matchen `\s` NICHT, haengen sich sonst an eine Pinyin-Silbe
- * und zerbrechen die Tokenisierung (die Silbe gilt dann nicht mehr als Pinyin).
+ * mischt (U+200B..U+200F Zero-Width/Richtungsmarken, U+2060 Word Joiner). Diese
+ * matchen `\s` NICHT, haengen sich sonst an eine Pinyin-Silbe und zerbrechen die
+ * Tokenisierung (die Silbe gilt dann nicht mehr als Pinyin).
+ *
+ * U+FEFF (BOM/Zero-Width No-Break Space) wird bewusst NICHT geloescht: es ist in
+ * JavaScript bereits Teil von `\s` und wirkt damit als Token-Trenner. Wuerde man
+ * es loeschen, klebten umliegende Tokens zusammen ("sh\u00EC\uFEFFIch" -> "sh\u00ECIch").
+ * Die nachgelagerte `\s+`-Normalisierung macht daraus wie gehabt ein Leerzeichen.
  */
 export function stripInvisible(s: string): string {
-  return s.replace(/[\u200B-\u200F\u2060\uFEFF]/g, '');
+  return s.replace(/[\u200B-\u200F\u2060]/g, '');
 }
 
 /** Behaelt nur CJK-Ideogramme und CJK-/Vollbreiten-Satzzeichen. */
