@@ -30,16 +30,17 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.version.outputs.version }}
         run: |
-          # "Done" means a release exists AND carries its chrome asset. A bare
-          # release without the asset (e.g. a create that failed mid-upload) is
-          # treated as not-done, so this run rebuilds and re-attaches the asset
-          # instead of skipping over a broken release.
-          if gh release view "v$VERSION" --repo "$GITHUB_REPOSITORY" \
-               --json assets --jq '.assets[].name' 2>/dev/null | grep -q -- '-chrome.zip'; then
+          # "Done" means a PUBLISHED (non-draft) release that carries a fully
+          # UPLOADED -chrome.zip asset. A draft, or a release whose asset upload
+          # did not finish (state != uploaded), counts as not-done - so an
+          # incomplete release is never mistaken for a finished one; this run
+          # (re)builds and publishes instead of skipping.
+          if gh release view "v$VERSION" --repo "$GITHUB_REPOSITORY" --json isDraft,assets 2>/dev/null \
+               | jq -e '.isDraft == false and (.assets | any(.state == "uploaded" and (.name | endswith("-chrome.zip"))))' >/dev/null; then
             echo "Release v$VERSION already published with its asset - skipping."
             echo "exists=true" >> "$GITHUB_OUTPUT"
           else
-            echo "Release v$VERSION not published (or missing its asset) - will build and publish."
+            echo "Release v$VERSION not fully published yet - will build and publish."
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
 
@@ -69,24 +70,24 @@ jobs:
           # freshly built asset. If create fails, the release already exists:
           #   - a concurrent run for the SAME version won the race, or
           #   - an earlier run left a broken (assetless) release.
-          # We must NOT clobber an existing asset: it was built from the tagged
+          # We must NOT overwrite a COMPLETE asset: it was built from the tagged
           # commit, while ours may come from a different same-version commit, so
-          # overwriting it would make the asset mismatch the tag. So: if the
-          # asset is already attached we are done (the concurrent winner's asset
-          # stays untouched); only if it is entirely missing do we attach our
-          # freshly built one (nothing to overwrite then) to repair a release
-          # left behind by a create that failed mid-upload.
+          # replacing it would make the asset mismatch the tag. So: if a fully
+          # uploaded asset is already attached we are done (the concurrent
+          # winner's asset stays untouched). Only when no complete asset exists
+          # do we attach our freshly built one (--clobber to replace a stuck,
+          # half-uploaded asset), repairing a create that failed mid-upload.
           if ! gh release create "v$VERSION" \
               .output/*-chrome.zip \
               --repo "$GITHUB_REPOSITORY" \
               --target "$GITHUB_SHA" \
               --title "v$VERSION" \
               --generate-notes; then
-            if gh release view "v$VERSION" --repo "$GITHUB_REPOSITORY" \
-                 --json assets --jq '.assets[].name' 2>/dev/null | grep -q -- '-chrome.zip'; then
-              echo "Release v$VERSION already exists with its asset (won by a concurrent run) - nothing to do."
+            if gh release view "v$VERSION" --repo "$GITHUB_REPOSITORY" --json assets 2>/dev/null \
+                 | jq -e '.assets | any(.state == "uploaded" and (.name | endswith("-chrome.zip")))' >/dev/null; then
+              echo "Release v$VERSION already exists with its uploaded asset (won by a concurrent run) - nothing to do."
             else
-              echo "Release v$VERSION exists without its asset - attaching the freshly built one."
-              gh release upload "v$VERSION" .output/*-chrome.zip --repo "$GITHUB_REPOSITORY"
+              echo "Release v$VERSION exists without a complete asset - attaching the freshly built one."
+              gh release upload "v$VERSION" .output/*-chrome.zip --repo "$GITHUB_REPOSITORY" --clobber
             fi
           fi
