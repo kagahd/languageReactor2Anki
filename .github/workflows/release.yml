@@ -30,11 +30,16 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.version.outputs.version }}
         run: |
-          if gh release view "v$VERSION" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "Release v$VERSION already exists - skipping."
+          # "Done" means a release exists AND carries its chrome asset. A bare
+          # release without the asset (e.g. a create that failed mid-upload) is
+          # treated as not-done, so this run rebuilds and re-attaches the asset
+          # instead of skipping over a broken release.
+          if gh release view "v$VERSION" --repo "$GITHUB_REPOSITORY" \
+               --json assets --jq '.assets[].name' 2>/dev/null | grep -q -- '-chrome.zip'; then
+            echo "Release v$VERSION already published with its asset - skipping."
             echo "exists=true" >> "$GITHUB_OUTPUT"
           else
-            echo "Release v$VERSION does not exist yet - will build and publish."
+            echo "Release v$VERSION not published (or missing its asset) - will build and publish."
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
 
@@ -58,24 +63,22 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.version.outputs.version }}
         run: |
-          # Create the release. No concurrency guard is used so that several
-          # version bumps in quick succession each publish their own version
-          # (a concurrency group would cancel pending runs and drop a version).
-          # The trade-off is a possible race on the SAME version (e.g. a version
-          # bump merge plus a quick doc merge): both runs may pass the existence
-          # check and try to create. gh then fails for the loser, so we re-check
-          # existence and treat "already there" as success - idempotent, no false
-          # failure and no duplicate.
+          # No concurrency guard, so several version bumps in quick succession
+          # each publish their own version (a concurrency group would cancel
+          # pending runs and drop a version). Try to create the release; if that
+          # fails the release already exists - either a concurrent run for the
+          # same version won the race, or an earlier run created it but failed
+          # before attaching the asset. In both cases upload our freshly built
+          # asset with --clobber, so we never accept a release that is missing
+          # its asset. If the release genuinely does not exist, the upload fails
+          # too and the step errors out (real failure, surfaced).
           if ! gh release create "v$VERSION" \
               .output/*-chrome.zip \
               --repo "$GITHUB_REPOSITORY" \
               --target "$GITHUB_SHA" \
               --title "v$VERSION" \
               --generate-notes; then
-            if gh release view "v$VERSION" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-              echo "Release v$VERSION already exists (created concurrently) - treating as success."
-            else
-              echo "gh release create failed and v$VERSION does not exist." >&2
-              exit 1
-            fi
+            echo "gh release create failed - release likely exists; ensuring the asset is attached."
+            gh release upload "v$VERSION" .output/*-chrome.zip \
+              --repo "$GITHUB_REPOSITORY" --clobber
           fi
