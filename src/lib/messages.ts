@@ -7,6 +7,7 @@ export type Message =
 
 export type AddCardResponse =
   | { ok: true; noteId: number }
+  | { ok: true; duplicate: true }
   | { ok: false; error: string };
 
 export type PingResponse =

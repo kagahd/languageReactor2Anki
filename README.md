@@ -55,6 +55,9 @@ The same cards after syncing, in light and dark mode:
 - **Pronunciation** via Anki's built-in text-to-speech.
 - **Per-skill subdecks** (`…::Reading`, `…::Translating`, `…::Listening`) so each skill can be studied
   or suspended on its own.
+- **Duplicate-aware**: a word with the same meaning and sentence is not added twice; the same word in
+  a *different* sentence is added as a new card. The source link/timestamp is ignored for this check
+  (as is the frequency rank, which Language Reactor does not always display).
 - **Automatic field cleanup** (Pinyin that LR mixes into the Chinese/translation lines is removed) and
   **dark-mode-aware** card styling.
 

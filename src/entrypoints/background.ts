@@ -30,8 +30,9 @@ async function handle(
       return { ok: true, version };
     }
     if (msg.type === 'ADD_CARD') {
-      const { noteId } = await addCard(msg.card, settings);
-      return { ok: true, noteId };
+      const result = await addCard(msg.card, settings);
+      if ('duplicate' in result) return { ok: true, duplicate: true };
+      return { ok: true, noteId: result.noteId };
     }
     if (msg.type === 'SYNC_MODEL') {
       await ensureModel(settings.modelName, settings.ankiUrl, settings.toneColors);

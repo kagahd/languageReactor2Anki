@@ -128,7 +128,10 @@ export default defineContentScript({
           type: 'ADD_CARD',
           card,
         })) as AddCardResponse;
-        if (res.ok) {
+        if (res.ok && 'duplicate' in res) {
+          setButtonState(btn, 'ok');
+          toast(`Already in Anki (identical): ${card.hanzi}`, 'ok');
+        } else if (res.ok) {
           setButtonState(btn, 'ok');
           toast(`Saved to Anki: ${card.hanzi} (${card.pinyin})`, 'ok');
         } else {
