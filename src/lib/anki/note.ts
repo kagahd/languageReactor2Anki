@@ -1,6 +1,6 @@
 import type { VocabCard } from '../types';
 import type { Settings } from '../settings';
-import { ankiInvoke, ensureDeck } from './connect';
+import { AnkiConnectError, ankiInvoke, ensureDeck } from './connect';
 import { CARD_TEMPLATES, ensureModel } from './model';
 import { ensureLibraryMedia, fetchStrokeData } from './strokes';
 import { toneColorize } from '../pinyin';
@@ -61,9 +61,7 @@ export function buildFields(card: VocabCard): Record<string, string> {
   };
 }
 
-export interface AddNoteResult {
-  noteId: number;
-}
+export type AddCardResult = { noteId: number } | { duplicate: true };
 
 function subdecksFor(deckName: string): string[] {
   return CARD_TEMPLATES.map((t) => `${deckName}::${t.Name}`);
@@ -97,19 +95,50 @@ async function ensureSetup(settings: Settings): Promise<void> {
   return setupPromise;
 }
 
+/** Drops the cached setup so the next add re-creates deck/model/subdecks/media.
+ *  Used to self-heal when the user deleted the deck or note type in Anki. */
+function invalidateSetup(): void {
+  setupKey = null;
+  setupPromise = null;
+}
+
 /**
  * Orchestriert das Anlegen einer Karte: Setup (gecacht) + Note anlegen.
  * Wirft AnkiConnectError bei Problemen (inkl. Dubletten).
  */
-export async function addCard(card: VocabCard, settings: Settings): Promise<AddNoteResult> {
+// Serialize adds so the duplicate check and the insert form one critical section:
+// two concurrent ADD_CARD messages must not both pass the check and then insert.
+let addQueue: Promise<unknown> = Promise.resolve();
+
+export function addCard(card: VocabCard, settings: Settings): Promise<AddCardResult> {
+  const run = addQueue.then(
+    () => addCardImpl(card, settings),
+    () => addCardImpl(card, settings),
+  );
+  // Keep the chain alive regardless of this call's outcome.
+  addQueue = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  return run;
+}
+
+async function addCardImpl(card: VocabCard, settings: Settings): Promise<AddCardResult> {
   const { ankiUrl, deckName } = settings;
 
   await ensureSetup(settings);
   const subdeckByOrd = subdecksFor(deckName);
 
+  const fields = buildFields(card);
+
+  // Skip identical duplicates: same word AND same meaning/sentence. Differences
+  // in source timestamp, frequency or stroke data do not count as "different".
+  // If the lookup itself fails, propagate the error instead of inserting blind -
+  // otherwise a transient failure could create a duplicate.
+  if (await isDuplicate(fields, settings)) return { duplicate: true };
+
   // Strichfolge-Daten offline einbetten (gecacht pro Zeichen).
   // Fehlschlaege hier sind nicht kritisch - die Karte wird trotzdem angelegt.
-  const fields = buildFields(card);
   try {
     const strokeData = await fetchStrokeData(card.hanzi);
     if (Object.keys(strokeData).length > 0) {
@@ -119,17 +148,76 @@ export async function addCard(card: VocabCard, settings: Settings): Promise<AddN
     console.warn('[lr2anki] Could not load stroke data:', e);
   }
 
-  const note = {
+  const note: Record<string, unknown> = {
     deckName,
     modelName: settings.modelName,
     fields,
     tags: ['language-reactor', card.source.videoId ?? 'youtube'].filter(Boolean),
-    options: { allowDuplicate: false, duplicateScope: 'deck' },
+    // Our own content-based check ran above; let Anki add it. (Same Hanzi with a
+    // different sentence/translation is intentionally allowed as a new card.)
+    options: { allowDuplicate: true },
   };
 
+  try {
+    const noteId = await createNote(note, subdeckByOrd, deckName, ankiUrl);
+    return { noteId };
+  } catch (e) {
+    // Self-heal: if the deck or note type was deleted in Anki since the cached
+    // setup ran, re-create everything and retry once.
+    if (e instanceof AnkiConnectError && /was not found/i.test(e.message)) {
+      invalidateSetup();
+      await ensureSetup(settings);
+      const noteId = await createNote(note, subdeckByOrd, deckName, ankiUrl);
+      return { noteId };
+    }
+    throw e;
+  }
+}
+
+/** True if a note with identical content already exists (same Hanzi plus the
+ *  same meaning and sentence fields). Source timestamp, frequency and stroke
+ *  data are ignored, so re-clipping the same word in a different sentence is
+ *  allowed, but an exact repeat is skipped. */
+async function isDuplicate(
+  fields: Record<string, string>,
+  settings: Settings,
+): Promise<boolean> {
+  const { ankiUrl, modelName } = settings;
+  // Escape search-string delimiters; the model name is user-editable and may
+  // contain quotes or backslashes that would otherwise break the query.
+  const esc = (s: string) => s.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  const query = `"note:${esc(modelName)}" "Hanzi:${esc(fields.Hanzi ?? '')}"`;
+  const ids = await ankiInvoke<number[]>('findNotes', { query }, ankiUrl);
+  if (ids.length === 0) return false;
+
+  const infos = await ankiInvoke<Array<{ fields: Record<string, { value: string }> }>>(
+    'notesInfo',
+    { notes: ids },
+    ankiUrl,
+  );
+  const keys = [
+    'Hanzi',
+    'Pinyin',
+    'Meaning',
+    'Meanings',
+    'SentenceHanzi',
+    'SentencePinyin',
+    'SentenceTranslation',
+  ];
+  return infos.some((info) =>
+    keys.every((k) => (info.fields[k]?.value ?? '') === (fields[k] ?? '')),
+  );
+}
+
+async function createNote(
+  note: Record<string, unknown>,
+  subdeckByOrd: string[],
+  deckName: string,
+  ankiUrl: string,
+): Promise<number> {
   const noteId = await ankiInvoke<number>('addNote', { note }, ankiUrl);
   await routeCardsToSubdecks(noteId, subdeckByOrd, deckName, ankiUrl);
-  return { noteId };
+  return noteId;
 }
 
 /** Verschiebt die frisch erzeugten Karten anhand ihres Template-Index (ord)
