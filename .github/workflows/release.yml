@@ -1,0 +1,66 @@
+name: Release
+
+# Publishes a GitHub Release automatically when the version in package.json
+# changes. The only manual step stays the version bump in a PR: once that PR
+# is merged into main, this workflow builds the extension and creates the
+# release + tag for that version. It is idempotent - pushes to main that do
+# not introduce a new version (e.g. doc-only changes) are skipped, so no
+# duplicate releases are created.
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write # needed to create the release and its tag
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # node is preinstalled on the runner, so we can read the version without
+      # a full npm install - that way non-release pushes skip straight out.
+      - id: version
+        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          if gh release view "v$VERSION" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release v$VERSION already exists - skipping."
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Release v$VERSION does not exist yet - will build and publish."
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - if: steps.check.outputs.exists == 'false'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - if: steps.check.outputs.exists == 'false'
+        run: npm ci
+
+      - if: steps.check.outputs.exists == 'false'
+        run: npm run build
+
+      - if: steps.check.outputs.exists == 'false'
+        run: npm run zip
+
+      - if: steps.check.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          gh release create "v$VERSION" \
+            .output/*-chrome.zip \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "v$VERSION" \
+            --generate-notes
