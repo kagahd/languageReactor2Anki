@@ -14,14 +14,6 @@ on:
 permissions:
   contents: write # needed to create the release and its tag
 
-# Serialize release runs so two quick pushes to main (e.g. a version bump
-# followed by a doc change) never publish concurrently. cancel-in-progress is
-# false so an in-flight release is never aborted mid-publish; a queued run only
-# starts afterwards and then finds the release already exists and skips.
-concurrency:
-  group: release-${{ github.ref }}
-  cancel-in-progress: false
-
 jobs:
   release:
     runs-on: ubuntu-latest
@@ -66,9 +58,24 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.version.outputs.version }}
         run: |
-          gh release create "v$VERSION" \
-            .output/*-chrome.zip \
-            --repo "$GITHUB_REPOSITORY" \
-            --target "$GITHUB_SHA" \
-            --title "v$VERSION" \
-            --generate-notes
+          # Create the release. No concurrency guard is used so that several
+          # version bumps in quick succession each publish their own version
+          # (a concurrency group would cancel pending runs and drop a version).
+          # The trade-off is a possible race on the SAME version (e.g. a version
+          # bump merge plus a quick doc merge): both runs may pass the existence
+          # check and try to create. gh then fails for the loser, so we re-check
+          # existence and treat "already there" as success - idempotent, no false
+          # failure and no duplicate.
+          if ! gh release create "v$VERSION" \
+              .output/*-chrome.zip \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" \
+              --title "v$VERSION" \
+              --generate-notes; then
+            if gh release view "v$VERSION" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+              echo "Release v$VERSION already exists (created concurrently) - treating as success."
+            else
+              echo "gh release create failed and v$VERSION does not exist." >&2
+              exit 1
+            fi
+          fi
