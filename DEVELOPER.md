@@ -95,3 +95,18 @@ python tools/make_icon.py public/icon
 ```
 
 WXT picks them up automatically and writes the manifest `icons` entries.
+
+## Releasing
+
+Releases are automated. The only manual step is the version bump, done in a normal PR:
+
+1. In a feature/release branch, bump the version: `npm version <x.y.z> --no-git-tag-version`
+   (this edits `package.json` and `package-lock.json`; do **not** let it create a git tag).
+2. Open a PR and get it merged into `main` (CI must be green; `main` is protected).
+3. On merge, the `Release` workflow (`.github/workflows/release.yml`) reads the version from
+   `package.json`, builds and zips the extension, and - if no release for that version exists yet -
+   creates the GitHub Release `v<x.y.z>` with the `…-chrome.zip` asset and auto-generated notes. The
+   tag is created on the merged commit, so the published asset always matches the tagged code.
+
+The workflow is idempotent: pushes to `main` that do not introduce a new version are skipped, so no
+manual tagging, zipping or `gh release` steps are needed.

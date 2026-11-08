@@ -5,12 +5,14 @@ import {
   keepHanzi,
   keepPinyin,
   splitPinyinTranslation,
+  stripInvisible,
 } from './sanitize';
 import type { Meaning, Sentence, VideoSource, VocabCard } from './types';
 
-/** textContent, Mehrfach-Whitespace zu einem Space normalisiert, getrimmt. */
+/** textContent, unsichtbare Zero-Width-Zeichen entfernt, Mehrfach-Whitespace zu
+ *  einem Space normalisiert, getrimmt. */
 function txt(el: Element | null | undefined): string {
-  return (el?.textContent ?? '').replace(/\s+/g, ' ').trim();
+  return stripInvisible(el?.textContent ?? '').replace(/\s+/g, ' ').trim();
 }
 
 /** Nur die direkten Textknoten eines Elements (ohne Kinder), ohne Whitespace. */
@@ -19,7 +21,7 @@ function directText(el: Element): string {
   el.childNodes.forEach((n) => {
     if (n.nodeType === Node.TEXT_NODE) s += n.textContent ?? '';
   });
-  return s.replace(/\s+/g, '').trim();
+  return stripInvisible(s).replace(/\s+/g, '').trim();
 }
 
 /** Hanzi aus einem data-word-key wie "WORD|新手|zh-CN". */

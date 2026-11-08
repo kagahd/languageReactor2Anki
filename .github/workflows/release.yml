@@ -1,0 +1,106 @@
+name: Release
+
+# Publishes a GitHub Release automatically when the version in package.json
+# changes. The only manual step stays the version bump in a PR: once that PR is
+# merged into main, this workflow builds the extension and creates the release +
+# tag for that version. It is idempotent - pushes to main that do not introduce
+# a new version (e.g. doc-only changes) are skipped, so no duplicate releases.
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write # needed to create the release and its tag
+
+jobs:
+  # Read the version first so the release job can key its concurrency group on
+  # it: a concurrency group expression cannot read package.json directly, but it
+  # can reference a dependency job's output via the needs context.
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: v
+        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+
+  release:
+    needs: version
+    runs-on: ubuntu-latest
+    # Serialize per version. Two pushes carrying the SAME version (e.g. a version
+    # bump plus a quick same-version follow-up) never run at the same time, so
+    # they cannot race on create or clobber each other's in-flight asset. A
+    # DIFFERENT version uses a different group and stays fully independent, so no
+    # version's release is ever dropped. cancel-in-progress is false so an
+    # in-flight publish is never aborted; a queued same-version run resumes after
+    # it and then finds the release already complete and skips.
+    concurrency:
+      group: release-v${{ needs.version.outputs.version }}
+      cancel-in-progress: false
+    env:
+      GH_TOKEN: ${{ github.token }}
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: check
+        run: |
+          # "Done" means a PUBLISHED (non-draft) release that carries a fully
+          # UPLOADED -chrome.zip asset. A draft, or a release whose asset upload
+          # did not finish (state != uploaded), counts as not-done - so an
+          # incomplete release is never mistaken for a finished one; this run
+          # (re)builds and publishes instead of skipping.
+          if gh release view "v$VERSION" --repo "$GITHUB_REPOSITORY" --json isDraft,assets 2>/dev/null \
+               | jq -e '.isDraft == false and (.assets | any(.state == "uploaded" and (.name | endswith("-chrome.zip"))))' >/dev/null; then
+            echo "Release v$VERSION already published with its asset - skipping."
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Release v$VERSION not fully published yet - will build and publish."
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - if: steps.check.outputs.exists == 'false'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - if: steps.check.outputs.exists == 'false'
+        run: npm ci
+
+      - if: steps.check.outputs.exists == 'false'
+        run: npm run build
+
+      - if: steps.check.outputs.exists == 'false'
+        run: npm run zip
+
+      - if: steps.check.outputs.exists == 'false'
+        run: |
+          # Per-version serialization (job concurrency above) guarantees no other
+          # run for this version is active, so neither the create nor a clobber
+          # below can race an in-flight upload. Create the release + tag with the
+          # freshly built asset. If create fails the release already exists (a
+          # re-run after a partial publish); attach the asset only if a complete
+          # one is not already present.
+          if ! gh release create "v$VERSION" \
+              .output/*-chrome.zip \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" \
+              --title "v$VERSION" \
+              --generate-notes; then
+            if gh release view "v$VERSION" --repo "$GITHUB_REPOSITORY" --json assets 2>/dev/null \
+                 | jq -e '.assets | any(.state == "uploaded" and (.name | endswith("-chrome.zip")))' >/dev/null; then
+              echo "Release v$VERSION already complete - nothing to do."
+            else
+              echo "Release v$VERSION incomplete - attaching the freshly built asset."
+              gh release upload "v$VERSION" .output/*-chrome.zip --repo "$GITHUB_REPOSITORY" --clobber
+            fi
+          fi
+
+          # Belt-and-braces: the workflow never creates drafts, but if a release
+          # v$VERSION was pre-created as a draft (e.g. manually), make sure it
+          # ends up published instead of being silently left unpublished. This is
+          # a no-op when the release is already published.
+          gh release edit "v$VERSION" --draft=false --repo "$GITHUB_REPOSITORY" >/dev/null

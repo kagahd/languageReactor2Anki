@@ -1,6 +1,6 @@
 {
   "name": "languagereactor2anki",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Save Chinese (Mandarin) vocabulary from Language Reactor (YouTube) as rich Anki cards via AnkiConnect. Currently Chinese-only despite the generic name.",
   "type": "module",
   "private": true,
