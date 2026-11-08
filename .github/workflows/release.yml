@@ -14,6 +14,14 @@ on:
 permissions:
   contents: write # needed to create the release and its tag
 
+# Serialize release runs so two quick pushes to main (e.g. a version bump
+# followed by a doc change) never publish concurrently. cancel-in-progress is
+# false so an in-flight release is never aborted mid-publish; a queued run only
+# starts afterwards and then finds the release already exists and skips.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 jobs:
   release:
     runs-on: ubuntu-latest
