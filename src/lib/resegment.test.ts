@@ -20,6 +20,19 @@ describe('syllabify', () => {
   it('never splits a token with uppercase (e.g. a translation word)', () => {
     expect(syllabify('Willkommen')).toEqual(['Willkommen']);
   });
+  it('keeps valid -ue syllables whole (xué/jué/què/yuè)', () => {
+    // Regression: without "ue" in the finals, "xué" wrongly split into "xu é".
+    expect(syllabify('xué')).toEqual(['xué']);
+    expect(syllabify('yuè')).toEqual(['yuè']);
+    expect(syllabify('què')).toEqual(['què']);
+  });
+  it('splits a token that ends in punctuation and reattaches it', () => {
+    expect(syllabify('zìjǐ.')).toEqual(['zì', 'jǐ.']);
+  });
+  it('terminates quickly on a long unsegmentable token', () => {
+    const token = 'an'.repeat(12) + 'x';
+    expect(syllabify(token)).toEqual([token]);
+  });
 });
 
 describe('resegmentPinyin', () => {
@@ -37,5 +50,14 @@ describe('resegmentPinyin', () => {
   });
   it('returns null for empty input', () => {
     expect(resegmentPinyin('', 3)).toBeNull();
+  });
+  it('splits a glued token at a sentence boundary with trailing punctuation', () => {
+    // 做自己。 -> "zuò zìjǐ." where 自己 is glued; punctuation stays on the last syllable.
+    expect(resegmentPinyin('zuò zìjǐ.', 3)).toBe('zuò zì jǐ.');
+  });
+  it('does not mis-split when a valid -ue syllable meets an ambiguous token', () => {
+    // 学西安话: "xué xīān huà" - 西安 stays ambiguous, so the count never matches
+    // and the original is kept (no bogus "xu é ...").
+    expect(resegmentPinyin('xué xīān huà', 4)).toBeNull();
   });
 });

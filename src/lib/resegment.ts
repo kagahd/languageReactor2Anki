@@ -13,7 +13,7 @@ const INITIALS = [
 const FINALS = [
   'a', 'o', 'e', 'ai', 'ei', 'ao', 'ou', 'an', 'en', 'ang', 'eng', 'ong', 'er',
   'i', 'ia', 'ie', 'iao', 'iu', 'ian', 'in', 'iang', 'ing', 'iong',
-  'u', 'ua', 'uo', 'uai', 'ui', 'uan', 'un', 'uang', 'ueng',
+  'u', 'ua', 'uo', 'ue', 'uai', 'ui', 'uan', 'un', 'uang', 'ueng',
   'v', 've', 'van', 'vn',
 ];
 
@@ -54,26 +54,37 @@ function toneless(s: string): string {
 }
 
 /** Collects up to `limit` distinct valid syllable segmentations (as length
- *  arrays). Stops early once `limit` is reached - we only need to know whether
- *  a segmentation is unique (1) or ambiguous (>=2). */
+ *  arrays). Stops once `limit` is reached - we only need to know whether a
+ *  segmentation is unique (1) or ambiguous (>=2). Start positions that lead to
+ *  no complete segmentation are memoized in `dead`, which bounds the search:
+ *  a token with many valid prefixes but an unsegmentable tail (e.g.
+ *  "anan...anx") would otherwise backtrack exponentially. */
 function segmentations(s: string, limit: number): number[][] {
   const results: number[][] = [];
-  const walk = (rest: string, acc: number[]): void => {
+  const dead = new Set<number>();
+  const acc: number[] = [];
+  const walk = (pos: number): void => {
     if (results.length >= limit) return;
-    if (rest.length === 0) {
+    if (pos === s.length) {
       results.push([...acc]);
       return;
     }
-    for (let len = Math.min(6, rest.length); len >= 1; len--) {
-      if (SYLLABLES.has(rest.slice(0, len))) {
+    if (dead.has(pos)) return;
+    const before = results.length;
+    const max = Math.min(6, s.length - pos);
+    for (let len = max; len >= 1; len--) {
+      if (SYLLABLES.has(s.slice(pos, pos + len))) {
         acc.push(len);
-        walk(rest.slice(len), acc);
+        walk(pos + len);
         acc.pop();
         if (results.length >= limit) return;
       }
     }
+    // Fully explored without the limit cutting us off: if nothing completed from
+    // here, remember it so other branches skip this position.
+    if (results.length === before) dead.add(pos);
   };
-  walk(s, []);
+  walk(0);
   return results;
 }
 
@@ -82,22 +93,33 @@ function segmentations(s: string, limit: number): number[][] {
  *  token is not pinyin, not segmentable, already a single syllable, or
  *  ambiguous (e.g. "fangan" = "fang-an" vs "fan-gan"), so an uncertain guess is
  *  never applied. */
+const TRAILING_PUNCT = /^([^.,!?;:…，。！？、]*)([.,!?;:…，。！？、]+)$/u;
+
 export function syllabify(word: string): string[] {
   // Pinyin syllables are lowercase; a token with any uppercase letter (e.g. a
   // stray translation word) is not ours to split.
   if (/[A-Z]/.test(word)) return [word];
-  const tl = toneless(word);
-  if (!/^[a-z]+$/.test(tl)) return [word]; // non-pinyin (punctuation, digits, ...)
+
+  // Peel a trailing run of punctuation (sentence boundaries like "zìjǐ.") so the
+  // syllables themselves can be segmented; it is reattached to the last one.
+  const m = TRAILING_PUNCT.exec(word);
+  const core = m?.[1] ?? word;
+  const trail = m?.[2] ?? '';
+
+  const tl = toneless(core);
+  if (!core || !/^[a-z]+$/.test(tl)) return [word]; // non-pinyin (digits, ...)
   const segs = segmentations(tl, 2);
   if (segs.length !== 1) return [word]; // 0 = unsegmentable, >=2 = ambiguous
   const lens = segs[0];
   if (!lens || lens.length <= 1) return [word];
+
   const out: string[] = [];
   let i = 0;
   for (const l of lens) {
-    out.push(word.slice(i, i + l));
+    out.push(core.slice(i, i + l));
     i += l;
   }
+  if (trail) out[out.length - 1] += trail;
   return out;
 }
 
