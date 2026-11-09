@@ -11,6 +11,14 @@ describe('isPinyin', () => {
     expect(isPinyin('welcome')).toBe(false);
     expect(isPinyin('Willkommen')).toBe(false);
   });
+  it('accepts erhua forms and standalone nasal syllables', () => {
+    expect(isPinyin('diǎnr')).toBe(true);
+    expect(isPinyin('nǎr')).toBe(true);
+    expect(isPinyin('er')).toBe(true);
+    expect(isPinyin('n')).toBe(true);
+    expect(isPinyin('ng')).toBe(true);
+    expect(isPinyin('m')).toBe(true);
+  });
 });
 
 describe('syllabify', () => {

@@ -132,9 +132,16 @@ export function syllabify(word: string): string[] {
 export function isPinyin(word: string): boolean {
   if (/[A-Z]/.test(word)) return false;
   const core = TRAILING_PUNCT.exec(word)?.[1] ?? word;
-  const tl = toneless(core);
-  if (!core || !/^[a-z]+$/.test(tl)) return false;
-  return segmentations(tl, 1).length === 1;
+  const full = toneless(core);
+  if (!core || !/^[a-z]+$/.test(full)) return false;
+  // Standalone nasal interjections (嗯 "n"/"ng", 呣 "m") are valid syllables but
+  // intentionally absent from the conservative re-segmentation dictionary.
+  if (full === 'n' || full === 'ng' || full === 'm') return true;
+  // Erhua: a trailing "r" (e.g. 点儿 "diǎnr", 哪儿 "nǎr") attaches to the preceding
+  // syllable. Strip it before the base check, but keep the real final "er".
+  const base = full !== 'er' && full.endsWith('r') ? full.slice(0, -1) : full;
+  if (!base) return false;
+  return segmentations(base, 1).length === 1;
 }
 
 /**

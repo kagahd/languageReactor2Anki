@@ -101,6 +101,11 @@ describe('splitPinyinTranslation', () => {
     expect(r.pinyin).toBe('wǒ fangan dào');
     expect(r.translation).toBe('welcome');
   });
+  it('keeps an erhua token in the pinyin (not truncated into the translation)', () => {
+    const r = splitPinyinTranslation('yì diǎnr A little.', 3);
+    expect(r.pinyin).toBe('yì diǎnr');
+    expect(r.translation).toBe('A little.');
+  });
   it('splits correctly when LR glues zero-width spaces onto a syllable', () => {
     // Regression: U+200B before "zi" used to make the 9th syllable fail the
     // pinyin check, cutting the split short and spilling pinyin into German.
