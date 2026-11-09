@@ -83,6 +83,12 @@ describe('splitPinyinTranslation', () => {
     expect(r.pinyin).toBe('wǒ shì');
     expect(r.translation).toBe('Something');
   });
+  it('stops at the Hanzi syllable count with a glued token + lowercase translation', () => {
+    // 8 Hanzi, "depín" is one token = two syllables, translation starts lowercase.
+    const r = splitPinyinTranslation('huān yíng lái dào wǒ depín dào welcome to my channel.', 8);
+    expect(r.pinyin).toBe('huān yíng lái dào wǒ depín dào');
+    expect(r.translation).toBe('welcome to my channel.');
+  });
   it('splits correctly when LR glues zero-width spaces onto a syllable', () => {
     // Regression: U+200B before "zi" used to make the 9th syllable fail the
     // pinyin check, cutting the split short and spilling pinyin into German.

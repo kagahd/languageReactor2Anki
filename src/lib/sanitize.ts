@@ -2,6 +2,8 @@
 // in die Hanzi-/Uebersetzungszeile mischt. Bewusst DOM-frei und ohne Seiteneffekte,
 // damit sie als Unit-Tests pruefbar sind (siehe sanitize.test.ts).
 
+import { syllabify } from './resegment';
+
 /**
  * Entfernt unsichtbare Null-Breite-/Steuerzeichen, die LR zwischen die Silben
  * mischt (U+200B..U+200F Zero-Width/Richtungsmarken, U+2060 Word Joiner). Diese
@@ -57,10 +59,17 @@ export function splitPinyinTranslation(
     .replace(/^[㐀-鿿　-〿＀-￯\s]+/u, '');
   const words = cleaned.split(' ').filter(Boolean);
   const cap = hanziCount > 0 ? hanziCount : words.length;
+  // Count SYLLABLES, not tokens: LR may glue two syllables into one token
+  // ("depin" = 2 syllables). Stopping at the Hanzi syllable count keeps a
+  // lowercase translation word (e.g. English "welcome") out of the pinyin.
   let n = 0;
-  while (n < words.length && n < cap) {
+  let syllables = 0;
+  while (n < words.length && syllables < cap) {
     const w = words[n];
     if (w === undefined || !looksLikePinyin(w)) break;
+    const add = syllabify(w).length;
+    if (syllables + add > cap) break; // would overshoot the Hanzi count
+    syllables += add;
     n++;
   }
   return { pinyin: words.slice(0, n).join(' '), translation: words.slice(n).join(' ') };
