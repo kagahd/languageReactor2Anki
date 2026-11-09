@@ -83,6 +83,29 @@ describe('splitPinyinTranslation', () => {
     expect(r.pinyin).toBe('wǒ shì');
     expect(r.translation).toBe('Something');
   });
+  it('keeps token counting (not syllables) when hanziCount is 0, even with a glued token', () => {
+    const r = splitPinyinTranslation('wǒ depín dào', 0);
+    expect(r.pinyin).toBe('wǒ depín dào');
+    expect(r.translation).toBe('');
+  });
+  it('stops at the Hanzi syllable count with a glued token + lowercase translation', () => {
+    // 8 Hanzi, "depín" is one token = two syllables, translation starts lowercase.
+    const r = splitPinyinTranslation('huān yíng lái dào wǒ depín dào welcome to my channel.', 8);
+    expect(r.pinyin).toBe('huān yíng lái dào wǒ depín dào');
+    expect(r.translation).toBe('welcome to my channel.');
+  });
+  it('does not let a lowercase non-pinyin word compensate an ambiguous glued token', () => {
+    // "fangan" is ambiguous (counts as 1 syllable); "welcome" must not slip into
+    // the pinyin to make the count reach 4 - it is not segmentable pinyin.
+    const r = splitPinyinTranslation('wǒ fangan dào welcome', 4);
+    expect(r.pinyin).toBe('wǒ fangan dào');
+    expect(r.translation).toBe('welcome');
+  });
+  it('keeps an erhua token in the pinyin (not truncated into the translation)', () => {
+    const r = splitPinyinTranslation('yì diǎnr A little.', 3);
+    expect(r.pinyin).toBe('yì diǎnr');
+    expect(r.translation).toBe('A little.');
+  });
   it('splits correctly when LR glues zero-width spaces onto a syllable', () => {
     // Regression: U+200B before "zi" used to make the 9th syllable fail the
     // pinyin check, cutting the split short and spilling pinyin into German.
