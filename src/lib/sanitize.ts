@@ -58,18 +58,22 @@ export function splitPinyinTranslation(
     .trim()
     .replace(/^[㐀-鿿　-〿＀-￯\s]+/u, '');
   const words = cleaned.split(' ').filter(Boolean);
-  const cap = hanziCount > 0 ? hanziCount : words.length;
-  // Count SYLLABLES, not tokens: LR may glue two syllables into one token
-  // ("depin" = 2 syllables). Stopping at the Hanzi syllable count keeps a
-  // lowercase translation word (e.g. English "welcome") out of the pinyin.
+  // With a known Hanzi count, count SYLLABLES (not tokens): LR may glue two
+  // syllables into one token ("depin" = 2 syllables), and stopping at the Hanzi
+  // syllable count keeps a lowercase translation word (e.g. English "welcome")
+  // out of the pinyin. Without a Hanzi count there is no syllable target, so
+  // fall back to consuming every leading pinyin-looking token.
+  const hasCount = hanziCount > 0;
   let n = 0;
   let syllables = 0;
-  while (n < words.length && syllables < cap) {
+  while (n < words.length) {
     const w = words[n];
     if (w === undefined || !looksLikePinyin(w)) break;
-    const add = syllabify(w).length;
-    if (syllables + add > cap) break; // would overshoot the Hanzi count
-    syllables += add;
+    if (hasCount) {
+      const add = syllabify(w).length;
+      if (syllables + add > hanziCount) break; // would overshoot the Hanzi count
+      syllables += add;
+    }
     n++;
   }
   return { pinyin: words.slice(0, n).join(' '), translation: words.slice(n).join(' ') };
