@@ -7,6 +7,7 @@ import {
   splitPinyinTranslation,
   stripInvisible,
 } from './sanitize';
+import { resegmentPinyin } from './resegment';
 import type { Meaning, Sentence, VideoSource, VocabCard } from './types';
 
 /** textContent, unsichtbare Zero-Width-Zeichen entfernt, Mehrfach-Whitespace zu
@@ -69,9 +70,13 @@ function extractSentence(root: ParentNode): Sentence | null {
   const hanzi = keepHanzi(tokens.hanzi);
   const translitPinyin = keepPinyin(tokens.pinyin);
 
-  const split = splitPinyinTranslation(rawLine, cjkCount(hanzi));
+  const syllableCount = cjkCount(hanzi);
+  const split = splitPinyinTranslation(rawLine, syllableCount);
   // Volles Pinyin bevorzugen (aus der Uebersetzungszeile), sonst Untertitel-Translit.
-  const pinyin = split.pinyin || translitPinyin;
+  const rawPinyin = split.pinyin || translitPinyin;
+  // LR klebt in der Romanisierung manchmal Silben zusammen ("depin" statt "de pin").
+  // Nur anwenden, wenn die Resegmentierung exakt die Hanzi-Silbenzahl trifft.
+  const pinyin = resegmentPinyin(rawPinyin, syllableCount) ?? rawPinyin;
   const translation = split.translation || cleanTranslation(rawLine, translitPinyin);
 
   if (!hanzi && !translation) return null;
