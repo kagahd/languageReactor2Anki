@@ -2,7 +2,7 @@
 // in die Hanzi-/Uebersetzungszeile mischt. Bewusst DOM-frei und ohne Seiteneffekte,
 // damit sie als Unit-Tests pruefbar sind (siehe sanitize.test.ts).
 
-import { syllabify } from './resegment';
+import { isPinyin, syllabify } from './resegment';
 
 /**
  * Entfernt unsichtbare Null-Breite-/Steuerzeichen, die LR zwischen die Silben
@@ -68,7 +68,9 @@ export function splitPinyinTranslation(
   let syllables = 0;
   while (n < words.length) {
     const w = words[n];
-    if (w === undefined || !looksLikePinyin(w)) break;
+    // isPinyin requires the token to be segmentable into real syllables, so a
+    // lowercase translation word (e.g. "welcome") is not mistaken for pinyin.
+    if (w === undefined || !isPinyin(w)) break;
     if (hasCount) {
       const add = syllabify(w).length;
       if (syllables + add > hanziCount) break; // would overshoot the Hanzi count

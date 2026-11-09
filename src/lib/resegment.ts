@@ -124,6 +124,20 @@ export function syllabify(word: string): string[] {
 }
 
 /**
+ * True if `word` is a run of valid pinyin syllables (ignoring a trailing
+ * punctuation run) - i.e. it can be segmented into known syllables. Used to
+ * tell pinyin apart from a translation word: a lowercase word like "welcome"
+ * is not segmentable, so it is correctly rejected even though it is lowercase.
+ */
+export function isPinyin(word: string): boolean {
+  if (/[A-Z]/.test(word)) return false;
+  const core = TRAILING_PUNCT.exec(word)?.[1] ?? word;
+  const tl = toneless(core);
+  if (!core || !/^[a-z]+$/.test(tl)) return false;
+  return segmentations(tl, 1).length === 1;
+}
+
+/**
  * Re-segments space-separated pinyin so each token is a single syllable, but
  * only returns the result when it has exactly `expected` syllables (= Hanzi
  * count). Otherwise returns null and the caller keeps the original - so a wrong

@@ -94,6 +94,13 @@ describe('splitPinyinTranslation', () => {
     expect(r.pinyin).toBe('huān yíng lái dào wǒ depín dào');
     expect(r.translation).toBe('welcome to my channel.');
   });
+  it('does not let a lowercase non-pinyin word compensate an ambiguous glued token', () => {
+    // "fangan" is ambiguous (counts as 1 syllable); "welcome" must not slip into
+    // the pinyin to make the count reach 4 - it is not segmentable pinyin.
+    const r = splitPinyinTranslation('wǒ fangan dào welcome', 4);
+    expect(r.pinyin).toBe('wǒ fangan dào');
+    expect(r.translation).toBe('welcome');
+  });
   it('splits correctly when LR glues zero-width spaces onto a syllable', () => {
     // Regression: U+200B before "zi" used to make the 9th syllable fail the
     // pinyin check, cutting the split short and spilling pinyin into German.

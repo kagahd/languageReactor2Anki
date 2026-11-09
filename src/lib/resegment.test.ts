@@ -1,5 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { resegmentPinyin, syllabify } from './resegment';
+import { isPinyin, resegmentPinyin, syllabify } from './resegment';
+
+describe('isPinyin', () => {
+  it('accepts valid pinyin (incl. glued and trailing punctuation)', () => {
+    expect(isPinyin('wǒ')).toBe(true);
+    expect(isPinyin('depín')).toBe(true);
+    expect(isPinyin('zìjǐ.')).toBe(true);
+  });
+  it('rejects translation words (lowercase or capitalized)', () => {
+    expect(isPinyin('welcome')).toBe(false);
+    expect(isPinyin('Willkommen')).toBe(false);
+  });
+});
 
 describe('syllabify', () => {
   it('splits a glued two-syllable token', () => {
