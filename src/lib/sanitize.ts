@@ -95,3 +95,23 @@ export function cleanTranslation(raw: string, pinyin: string): string {
   }
   return t.trim();
 }
+
+/**
+ * Trims punctuation artifacts at the very start/end of an extracted sentence.
+ * LR's subtitle tokens sometimes carry leading punctuation from a neighbouring
+ * segment (e.g. "，，两天前…") or a dangling trailing separator from a cut
+ * subtitle ("…好朋友，"). Reading textContent pulls those into the sentence.
+ *
+ * Only separators and terminators are trimmed at the edges - deliberately NOT
+ * quotes or brackets, which can legitimately open/close a sentence (「…」, 《…》,
+ * "…"), so those are preserved. Leading: a sentence never validly starts with a
+ * separator or terminator, so any such leading run is removed. Trailing: only
+ * separators (comma, enumeration comma, semicolon, colon - CJK and ASCII) are
+ * removed, while a trailing terminator (。！？…) is kept. Punctuation INSIDE the
+ * sentence always stays.
+ */
+export function trimEdgePunct(s: string): string {
+  return s
+    .replace(/^[\s，。、；：！？…·,.;:!?]+/u, '')
+    .replace(/[\s，、；：,;:]+$/u, '');
+}
