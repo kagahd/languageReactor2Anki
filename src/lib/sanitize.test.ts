@@ -7,6 +7,7 @@ import {
   looksLikePinyin,
   splitPinyinTranslation,
   stripInvisible,
+  trimEdgePunct,
 } from './sanitize';
 
 // Zero-width space LR mixes between syllables (it does not match \s).
@@ -130,6 +131,28 @@ describe('stripInvisible', () => {
   });
   it('does NOT remove U+FEFF (it is whitespace, handled by \\s normalization)', () => {
     expect(stripInvisible(`shì${BOM}Ich`)).toBe(`shì${BOM}Ich`);
+  });
+});
+
+describe('trimEdgePunct', () => {
+  it('strips leading punctuation and a dangling trailing separator', () => {
+    expect(trimEdgePunct('，，两天前，我见了一个好朋友，')).toBe('两天前，我见了一个好朋友');
+  });
+  it('keeps inner punctuation and a trailing sentence terminator', () => {
+    expect(trimEdgePunct('我爱你。')).toBe('我爱你。');
+    expect(trimEdgePunct('，你好？')).toBe('你好？');
+  });
+  it('strips a trailing comma from pinyin but keeps inner commas', () => {
+    expect(trimEdgePunct('liǎng tiān qián, wǒ jiàn le yǒu,')).toBe('liǎng tiān qián, wǒ jiàn le yǒu');
+  });
+  it('leaves clean text untouched', () => {
+    expect(trimEdgePunct('两天前我见了一个好朋友')).toBe('两天前我见了一个好朋友');
+  });
+  it('keeps opening/closing quotes and brackets (only separators are trimmed)', () => {
+    expect(trimEdgePunct('「你好」')).toBe('「你好」');
+    expect(trimEdgePunct('《红楼梦》')).toBe('《红楼梦》');
+    // leading comma + trailing comma removed, the brackets around the sentence stay
+    expect(trimEdgePunct('，「你好」，')).toBe('「你好」');
   });
 });
 

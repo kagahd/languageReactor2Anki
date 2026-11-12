@@ -6,6 +6,7 @@ import {
   keepPinyin,
   splitPinyinTranslation,
   stripInvisible,
+  trimEdgePunct,
 } from './sanitize';
 import { resegmentPinyin } from './resegment';
 import type { Meaning, Sentence, VideoSource, VocabCard } from './types';
@@ -67,7 +68,10 @@ function extractSentence(root: ParentNode): Sentence | null {
   const rawLine = txt(root.querySelector(SEL.sentenceTranslation));
   const tokens = subText ? readTokens(subText) : { hanzi: '', pinyin: '' };
 
-  const hanzi = keepHanzi(tokens.hanzi);
+  // trimEdgePunct: LR's subtitle tokens can carry leading punctuation from a
+  // neighbouring segment ("，，两天前…") or a dangling trailing separator from a
+  // cut subtitle ("…好朋友，"). Those edge commas are not part of the sentence.
+  const hanzi = trimEdgePunct(keepHanzi(tokens.hanzi));
   const translitPinyin = keepPinyin(tokens.pinyin);
 
   const syllableCount = cjkCount(hanzi);
@@ -76,7 +80,7 @@ function extractSentence(root: ParentNode): Sentence | null {
   const rawPinyin = split.pinyin || translitPinyin;
   // LR klebt in der Romanisierung manchmal Silben zusammen ("depin" statt "de pin").
   // Nur anwenden, wenn die Resegmentierung exakt die Hanzi-Silbenzahl trifft.
-  const pinyin = resegmentPinyin(rawPinyin, syllableCount) ?? rawPinyin;
+  const pinyin = trimEdgePunct(resegmentPinyin(rawPinyin, syllableCount) ?? rawPinyin);
   const translation = split.translation || cleanTranslation(rawLine, translitPinyin);
 
   if (!hanzi && !translation) return null;
