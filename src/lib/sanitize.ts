@@ -66,24 +66,38 @@ export function splitPinyinTranslation(
   const hasCount = hanziCount > 0;
   const pinyin: string[] = [];
   let syllables = 0;
+  let opened = 0; // CJK/"smart" quotes opened around a pinyin gloss
   let i = 0;
-  // Edge CJK/"smart" quotes (LR wraps a word's pinyin gloss in “…”). Peeled only
+  // LR wraps a word's pinyin gloss in CJK/"smart" quotes. These are peeled only
   // in the PINYIN region and kept out of the pinyin output; the translation is
-  // never touched, so real quotes in any translation language stay intact.
+  // never altered, so real quotes in any language stay intact.
+  const OPEN_Q = /[\u201C\u2018]/;
+  const CLOSE_Q = /[\u201D\u2019]/;
   const peel = (w: string) => w.replace(/^[\u201C\u201D\u2018\u2019]+|[\u201C\u201D\u2018\u2019]+$/gu, '');
   for (; i < words.length; i++) {
     const w = words[i];
     if (w === undefined) break;
     const token = peel(w);
     if (token === '') {
-      // Standalone gloss quote: skip it only while pinyin is still expected
-      // (more pinyin follows AND the Hanzi count is not yet reached). Otherwise
-      // it belongs to the translation and must be kept there - this guards
-      // against eating a translation's opening quote when the next word happens
-      // to be pinyin-segmentable (e.g. German "die" = di+e).
-      const moreExpected = !hasCount || syllables < hanziCount;
-      const next = peel(words[i + 1] ?? '');
-      if (moreExpected && next !== '' && isPinyin(next)) continue;
+      // A pure quote token.
+      if (OPEN_Q.test(w)) {
+        // An opening quote is gloss markup only if a matching closing quote
+        // follows AND more pinyin is still expected; otherwise it opens the
+        // translation and the split stops (the quote stays in the translation).
+        const hasClose = words.slice(i + 1).some((t) => CLOSE_Q.test(t));
+        const moreExpected = !hasCount || syllables < hanziCount;
+        if (hasClose && moreExpected) {
+          opened++;
+          continue;
+        }
+        break;
+      }
+      // A closing quote: consume it only if it closes a gloss we opened (even at
+      // the syllable budget); otherwise it belongs to the translation.
+      if (opened > 0) {
+        opened--;
+        continue;
+      }
       break;
     }
     // isPinyin requires the token to be segmentable into real syllables, so a
@@ -94,6 +108,8 @@ export function splitPinyinTranslation(
       if (syllables + add > hanziCount) break; // would overshoot the Hanzi count
       syllables += add;
     }
+    if (OPEN_Q.test(w)) opened++; // glued opening quote, e.g. a leading quote
+    if (CLOSE_Q.test(w) && opened > 0) opened--; // glued closing quote
     pinyin.push(token);
   }
   return { pinyin: pinyin.join(' '), translation: words.slice(i).join(' ') };

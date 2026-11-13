@@ -119,6 +119,25 @@ describe('splitPinyinTranslation', () => {
     expect(r.pinyin).toBe('wǒ shì');
     expect(r.translation).toBe(`${LQ} die Katze`);
   });
+  it('consumes a matching closing gloss quote even at the syllable budget', () => {
+    // 去年 (2 Hanzi): the closing ” must not leak into the translation.
+    const r = splitPinyinTranslation(`${LQ} qù nián ${RQ} "Letztes Jahr"`, 2);
+    expect(r.pinyin).toBe('qù nián');
+    expect(r.translation).toBe('"Letztes Jahr"');
+  });
+  it('treats an opening quote with no matching close as the translation (erhua)', () => {
+    // 一点儿 (3 Hanzi): diǎnr is erhua (1 token); the stray “ has no closing ” and
+    // must stay in the translation, not open a gloss that eats German "die".
+    const r = splitPinyinTranslation(`yì diǎnr ${LQ} die Katze`, 3);
+    expect(r.pinyin).toBe('yì diǎnr');
+    expect(r.translation).toBe(`${LQ} die Katze`);
+  });
+  it('does not pull a translation word in to fill a reduced (blank-adjusted) budget', () => {
+    // simulates 4 Hanzi with one LR-blanked syllable: budget = 3, so "ma" stays.
+    const r = splitPinyinTranslation('wǒ xǐ de ma maison.', 3);
+    expect(r.pinyin).toBe('wǒ xǐ de');
+    expect(r.translation).toBe('ma maison.');
+  });
   it('stops at the Hanzi syllable count with a glued token + lowercase translation', () => {
     // 8 Hanzi, "depín" is one token = two syllables, translation starts lowercase.
     const r = splitPinyinTranslation('huān yíng lái dào wǒ depín dào welcome to my channel.', 8);

@@ -67,7 +67,10 @@ function readTokens(subText: Element): { hanzi: string; pinyin: string } {
 function extractSentence(root: ParentNode): Sentence | null {
   const subText = root.querySelector(SEL.subtitleText);
   // Drop LR's blanked-word placeholder ("[ __ ]") before splitting pinyin/translation.
-  const rawLine = stripBlankPlaceholders(txt(root.querySelector(SEL.sentenceTranslation)));
+  const rawWithBlanks = txt(root.querySelector(SEL.sentenceTranslation));
+  // Each blanked placeholder stands for one syllable LR removed from the line.
+  const blankCount = (rawWithBlanks.match(/\[[\s_]*\]/g) ?? []).length;
+  const rawLine = stripBlankPlaceholders(rawWithBlanks);
   const tokens = subText ? readTokens(subText) : { hanzi: '', pinyin: '' };
 
   // trimEdgePunct: LR's subtitle tokens can carry leading punctuation from a
@@ -77,7 +80,10 @@ function extractSentence(root: ParentNode): Sentence | null {
   const translitPinyin = keepPinyin(tokens.pinyin);
 
   const syllableCount = cjkCount(hanzi);
-  const split = splitPinyinTranslation(rawLine, syllableCount);
+  // Blanked syllables are gone from the romanization, so lower the pinyin budget
+  // by that many - otherwise the split would pull a translation word into the
+  // pinyin to fill the count (e.g. French "ma").
+  const split = splitPinyinTranslation(rawLine, Math.max(0, syllableCount - blankCount));
   // Volles Pinyin bevorzugen (aus der Uebersetzungszeile), sonst Untertitel-Translit.
   const rawPinyin = split.pinyin || translitPinyin;
   // LR klebt in der Romanisierung manchmal Silben zusammen ("depin" statt "de pin").
