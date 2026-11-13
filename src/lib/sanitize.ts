@@ -73,7 +73,16 @@ export interface SubtitleLine {
  */
 export function selectSentenceLines(lines: SubtitleLine[]): SubtitleLine[] {
   const hasCjk = (l: SubtitleLine) => /[㐀-鿿]/u.test(l.hanzi);
-  const readingKey = (l: SubtitleLine) => [...l.pinyin, ...l.loose].slice().sort().join('\u0001');
+  // Normalize syllable boundaries before comparing: split on whitespace and run
+  // the conservative syllabify so a grouped ("shíhòu") or glued ("depín") span
+  // matches separate per-syllable entries ("shí","hòu" / "de","pín").
+  const readingKey = (l: SubtitleLine) =>
+    [...l.pinyin, ...l.loose]
+      .flatMap((t) => t.split(/\s+/))
+      .filter(Boolean)
+      .flatMap((t) => syllabify(t))
+      .sort()
+      .join('\u0001');
   const cjkReadings = new Set(lines.filter((l) => hasCjk(l) && readingKey(l)).map(readingKey));
   const kept = lines.filter((l) => {
     if (hasCjk(l)) return true;

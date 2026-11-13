@@ -127,6 +127,16 @@ describe('selectSentenceLines', () => {
     const only = { hanzi: '今天', pinyin: ['jīn', 'tiān'], loose: [] };
     expect(selectSentenceLines([only])).toEqual([only]);
   });
+  it('matches readings across different syllable boundaries (grouped / glued)', () => {
+    // rom row glues 的频 -> "depín" and groups the whole reading; the Hanzi row
+    // has per-syllable translits. syllabify normalizes both so the rom row drops.
+    const rom = { hanzi: `${LQ}wǒdepíndào${RQ}`, pinyin: [], loose: ['wǒ', 'depín', 'dào'] };
+    const han = { hanzi: `${LQ}我的频道${RQ}`, pinyin: ['wǒ', 'de', 'pín', 'dào'], loose: [] };
+    expect(join(selectSentenceLines([rom, han]))).toEqual({
+      hanzi: `${LQ}我的频道${RQ}`,
+      pinyin: 'wǒ de pín dào',
+    });
+  });
 });
 
 describe('splitPinyinTranslation', () => {
