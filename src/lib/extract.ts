@@ -2,6 +2,7 @@ import { SEL } from './selectors';
 import {
   cjkCount,
   cleanTranslation,
+  isGlossLine,
   keepHanzi,
   keepPinyin,
   splitPinyinTranslation,
@@ -80,18 +81,31 @@ function extractSentence(root: ParentNode): Sentence | null {
   const translitPinyin = keepPinyin(tokens.pinyin);
 
   const syllableCount = cjkCount(hanzi);
-  // Blanked syllables are gone from the romanization, so lower the pinyin budget
-  // by that many - otherwise the split would pull a translation word into the
-  // pinyin to fill the count (e.g. French "ma").
-  const split = splitPinyinTranslation(rawLine, Math.max(0, syllableCount - blankCount));
-  // Volles Pinyin bevorzugen (aus der Uebersetzungszeile), sonst Untertitel-Translit.
-  const rawPinyin = split.pinyin || translitPinyin;
-  // LR klebt in der Romanisierung manchmal Silben zusammen ("depin" statt "de pin").
-  // Nur anwenden, wenn die Resegmentierung exakt die Hanzi-Silbenzahl trifft.
+
+  let rawPinyin: string;
+  let rawTranslation: string;
+  if (isGlossLine(rawLine)) {
+    // LR shows a word-gloss ("“shàng gè yuè” …"), not a sentence translation.
+    // Take the pinyin from the subtitle tokens and do NOT use the quoted gloss
+    // as the translation (the meaning is already on the card).
+    rawPinyin = translitPinyin;
+    rawTranslation = '';
+  } else {
+    // Blanked syllables are gone from the romanization, so lower the pinyin
+    // budget by that many - otherwise the split would pull a translation word
+    // into the pinyin to fill the count (e.g. French "ma").
+    const split = splitPinyinTranslation(rawLine, Math.max(0, syllableCount - blankCount));
+    // Prefer the full pinyin from the romanization line, else subtitle translit.
+    rawPinyin = split.pinyin || translitPinyin;
+    rawTranslation = split.translation || cleanTranslation(rawLine, translitPinyin);
+  }
+
+  // LR glues syllables in the romanization sometimes ("depin" -> "de pin"); only
+  // apply the re-segmentation when it yields exactly the Hanzi syllable count.
   const pinyin = trimEdgePunct(resegmentPinyin(rawPinyin, syllableCount) ?? rawPinyin);
-  // Also trim the translation: LR's sentence-final period can arrive as a
-  // separate token and land at the START of the translation ("。/. Mir ist…").
-  const translation = trimEdgePunct(split.translation || cleanTranslation(rawLine, translitPinyin));
+  // trimEdgePunct also on the translation: a sentence-final period can arrive as
+  // a separate token and land at the START of the translation ("。/. Mir ist…").
+  const translation = trimEdgePunct(rawTranslation);
 
   if (!hanzi && !translation) return null;
   return { hanzi, pinyin, translation };

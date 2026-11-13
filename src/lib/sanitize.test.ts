@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   cjkCount,
   cleanTranslation,
+  isGlossLine,
   keepHanzi,
   keepPinyin,
   looksLikePinyin,
@@ -94,62 +95,11 @@ describe('splitPinyinTranslation', () => {
     expect(r.pinyin).toBe('wǒ depín dào');
     expect(r.translation).toBe('');
   });
-  it('peels CJK quotes that wrap a pinyin gloss (quotes glued to tokens)', () => {
-    // LR: “shàng gè yuè” "letzten Monat"  (上个月, 3 Hanzi)
-    const r = splitPinyinTranslation(`${LQ}shàng gè yuè${RQ} "letzten Monat"`, 3);
-    expect(r.pinyin).toBe('shàng gè yuè');
-    expect(r.translation).toBe('"letzten Monat"');
-  });
-  it('skips standalone quote tokens in the pinyin region', () => {
-    // LR: “ qù nián ” huò zhě "Letztes Jahr" oder  (去年或者, 4 Hanzi)
-    const r = splitPinyinTranslation(`${LQ} qù nián ${RQ} huò zhě "Letztes Jahr" oder`, 4);
-    expect(r.pinyin).toBe('qù nián huò zhě');
-    expect(r.translation).toBe('"Letztes Jahr" oder');
-  });
-  it('never strips quotes from the translation (any language)', () => {
-    // fancy quotes AFTER the pinyin belong to the translation and must stay
-    const r = splitPinyinTranslation(`wǒ shì ${LQ} hello ${RQ} world`, 2);
-    expect(r.pinyin).toBe('wǒ shì');
-    expect(r.translation).toBe(`${LQ} hello ${RQ} world`);
-  });
-  it('keeps a translation quote even if the next word is pinyin-segmentable', () => {
-    // after the Hanzi count (2) is reached, a quote belongs to the translation;
-    // "die" happens to segment as di+e but must NOT be eaten as pinyin.
-    const r = splitPinyinTranslation(`wǒ shì ${LQ} die Katze`, 2);
-    expect(r.pinyin).toBe('wǒ shì');
-    expect(r.translation).toBe(`${LQ} die Katze`);
-  });
-  it('consumes a matching closing gloss quote even at the syllable budget', () => {
-    // 去年 (2 Hanzi): the closing ” must not leak into the translation.
-    const r = splitPinyinTranslation(`${LQ} qù nián ${RQ} "Letztes Jahr"`, 2);
-    expect(r.pinyin).toBe('qù nián');
-    expect(r.translation).toBe('"Letztes Jahr"');
-  });
-  it('treats an opening quote with no matching close as the translation (erhua)', () => {
-    // 一点儿 (3 Hanzi): diǎnr is erhua (1 token); the stray “ has no closing ” and
-    // must stay in the translation, not open a gloss that eats German "die".
-    const r = splitPinyinTranslation(`yì diǎnr ${LQ} die Katze`, 3);
-    expect(r.pinyin).toBe('yì diǎnr');
-    expect(r.translation).toBe(`${LQ} die Katze`);
-  });
   it('does not pull a translation word in to fill a reduced (blank-adjusted) budget', () => {
-    // simulates 4 Hanzi with one LR-blanked syllable: budget = 3, so "ma" stays.
+    // 4 Hanzi with one LR-blanked syllable -> caller passes budget 3, so "ma" stays.
     const r = splitPinyinTranslation('wǒ xǐ de ma maison.', 3);
     expect(r.pinyin).toBe('wǒ xǐ de');
     expect(r.translation).toBe('ma maison.');
-  });
-  it('keeps a quoted TRANSLATION span (not pinyin) intact, incl. the opening quote', () => {
-    // 一点儿 (3 Hanzi, erhua): the quoted span "A little" is not pinyin, so it is
-    // a quoted translation - the opening “ must not be discarded.
-    const r = splitPinyinTranslation(`yì diǎnr ${LQ} A little ${RQ}`, 3);
-    expect(r.pinyin).toBe('yì diǎnr');
-    expect(r.translation).toBe(`${LQ} A little ${RQ}`);
-  });
-  it('does not eat a pinyin-segmentable word from a glued quoted translation', () => {
-    // "a" segments as pinyin, but the span "a little" is not all-pinyin -> keep it.
-    const r = splitPinyinTranslation(`yì diǎnr ${LQ}a little${RQ}`, 3);
-    expect(r.pinyin).toBe('yì diǎnr');
-    expect(r.translation).toBe(`${LQ}a little${RQ}`);
   });
   it('stops at the Hanzi syllable count with a glued token + lowercase translation', () => {
     // 8 Hanzi, "depín" is one token = two syllables, translation starts lowercase.
@@ -193,6 +143,17 @@ describe('stripInvisible', () => {
   });
   it('does NOT remove U+FEFF (it is whitespace, handled by \\s normalization)', () => {
     expect(stripInvisible(`shì${BOM}Ich`)).toBe(`shì${BOM}Ich`);
+  });
+});
+
+describe('isGlossLine', () => {
+  it('detects a line that opens with a CJK/"smart" quote as a word-gloss', () => {
+    expect(isGlossLine(`${LQ}shàng gè yuè${RQ} "letzten Monat"`)).toBe(true);
+    expect(isGlossLine(`${LQ} qù nián ${RQ} huò zhě`)).toBe(true);
+  });
+  it('is false for a normal line, even if its translation contains quotes', () => {
+    expect(isGlossLine('wǒ shì xīn shǒu Ich bin neu')).toBe(false);
+    expect(isGlossLine(`tā shuō ${LQ}hallo${RQ}`)).toBe(false); // quote not at the start
   });
 });
 

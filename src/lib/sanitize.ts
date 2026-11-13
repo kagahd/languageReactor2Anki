@@ -62,82 +62,34 @@ export function splitPinyinTranslation(
   // syllables into one token ("depin" = 2 syllables), and stopping at the Hanzi
   // syllable count keeps a lowercase translation word (e.g. English "welcome")
   // out of the pinyin. Without a Hanzi count there is no syllable target, so
-  // fall back to consuming every leading pinyin-looking token.
+  // fall back to consuming every leading pinyin-looking token. (Word-gloss lines
+  // wrapped in CJK quotes are handled upstream via isGlossLine, so no quote
+  // logic is needed here.)
   const hasCount = hanziCount > 0;
-  const pinyin: string[] = [];
+  let n = 0;
   let syllables = 0;
-  let opened = 0; // CJK/"smart" quotes opened around a pinyin gloss
-  let i = 0;
-  // LR wraps a word's pinyin gloss in CJK/"smart" quotes (open “‘ / close ”’).
-  // Quotes are peeled only in the PINYIN region and kept out of the pinyin
-  // output; the translation is never altered, so real quotes in any language
-  // survive. A "‹quote›…‹quote›" span is treated as a gloss ONLY when every
-  // token inside it is pinyin - otherwise it is a quoted translation and the
-  // split stops, keeping the quotes in the translation.
-  const OPEN_Q = /[\u201C\u2018]/;
-  const CLOSE_Q = /[\u201D\u2019]/;
-  const peel = (w: string) => w.replace(/^[\u201C\u201D\u2018\u2019]+|[\u201C\u201D\u2018\u2019]+$/gu, '');
-  const glossSpanIsPinyin = (open: number): boolean => {
-    let close = -1;
-    for (let j = open; j < words.length; j++) {
-      const t = words[j];
-      if (t === undefined) break;
-      if (j === open) {
-        if (CLOSE_Q.test(t.replace(/^[\u201C\u2018]+/u, ''))) {
-          close = j;
-          break;
-        }
-      } else if (CLOSE_Q.test(t)) {
-        close = j;
-        break;
-      }
-    }
-    if (close === -1) return false; // no matching closing quote -> not a gloss
-    for (let k = open; k <= close; k++) {
-      const core = peel(words[k] ?? '');
-      if (core === '') continue; // the quote delimiters themselves
-      if (!isPinyin(core)) return false; // span contains non-pinyin -> translation
-    }
-    return true;
-  };
-  for (; i < words.length; i++) {
-    const w = words[i];
-    if (w === undefined) break;
-    // A token that OPENS a CJK quote: only a fully-pinyin quoted span (and only
-    // while pinyin is still expected) is a gloss; otherwise stop - it opens the
-    // translation, which must keep its quote.
-    if (/^[\u201C\u2018]/u.test(w)) {
-      const moreExpected = !hasCount || syllables < hanziCount;
-      if (!moreExpected || !glossSpanIsPinyin(i)) break;
-    }
-    const token = peel(w);
-    if (token === '') {
-      // Pure quote token. An opening quote here was validated as a gloss above.
-      if (OPEN_Q.test(w)) {
-        opened++;
-        continue;
-      }
-      // Closing quote: consume it only if it closes a gloss we opened (even at
-      // the syllable budget); otherwise it belongs to the translation.
-      if (opened > 0) {
-        opened--;
-        continue;
-      }
-      break;
-    }
-    // isPinyin requires the token to be segmentable into real syllables, so a
-    // lowercase translation word (e.g. "welcome") is not mistaken for pinyin.
-    if (!isPinyin(token)) break;
+  while (n < words.length) {
+    const w = words[n];
+    if (w === undefined || !isPinyin(w)) break;
     if (hasCount) {
-      const add = syllabify(token).length;
+      const add = syllabify(w).length;
       if (syllables + add > hanziCount) break; // would overshoot the Hanzi count
       syllables += add;
     }
-    if (OPEN_Q.test(w)) opened++; // glued opening quote, e.g. a leading quote
-    if (CLOSE_Q.test(w) && opened > 0) opened--; // glued closing quote
-    pinyin.push(token);
+    n++;
   }
-  return { pinyin: pinyin.join(' '), translation: words.slice(i).join(' ') };
+  return { pinyin: words.slice(0, n).join(' '), translation: words.slice(n).join(' ') };
+}
+
+/**
+ * True if the romanization line is an LR word-gloss rather than a sentence
+ * translation: LR wraps a looked-up word's pinyin in CJK/"smart" quotes and the
+ * line starts with the opening quote (e.g. “shàng gè yuè” "letzten Monat"). Such
+ * a line is not a usable sentence, so the caller takes the pinyin from the
+ * subtitle tokens and does not pull the gloss into the translation.
+ */
+export function isGlossLine(line: string): boolean {
+  return /^\s*[\u201C\u2018]/u.test(line);
 }
 
 /**
