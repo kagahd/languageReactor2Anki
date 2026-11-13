@@ -89,7 +89,13 @@ export function splitPinyinTranslation(
  * subtitle tokens and does not pull the gloss into the translation.
  */
 export function isGlossLine(line: string): boolean {
-  return /^\s*[\u201C\u2018]/u.test(line);
+  // Must open with a CJK/"smart" quote AND wrap pinyin - the first token after
+  // the quote has to be pinyin. This excludes an ordinary quoted translation
+  // (e.g. \u201CIch bin ein Neuling.\u201D), which must flow through the normal split.
+  const m = /^\s*[\u201C\u2018]\s*(\S+)/u.exec(line);
+  if (!m || m[1] === undefined) return false;
+  const first = m[1].replace(/[\u201C\u201D\u2018\u2019]+$/u, '');
+  return isPinyin(first);
 }
 
 /**

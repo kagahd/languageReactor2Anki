@@ -90,11 +90,20 @@ function extractSentence(root: ParentNode): Sentence | null {
     // as the translation (the meaning is already on the card).
     rawPinyin = translitPinyin;
     rawTranslation = '';
+  } else if (syllableCount > 0 && blankCount >= syllableCount) {
+    // Every pinyin syllable was a blanked placeholder: there is no pinyin to
+    // take from the romanization line, so the whole remainder is translation.
+    // (Passing budget 0 to the splitter would instead select its "unknown
+    // count" fallback and pull a translation word into the pinyin.)
+    rawPinyin = translitPinyin;
+    rawTranslation = rawLine;
   } else {
     // Blanked syllables are gone from the romanization, so lower the pinyin
     // budget by that many - otherwise the split would pull a translation word
-    // into the pinyin to fill the count (e.g. French "ma").
-    const split = splitPinyinTranslation(rawLine, Math.max(0, syllableCount - blankCount));
+    // into the pinyin to fill the count (e.g. French "ma"). When the Hanzi count
+    // is unknown (0), the splitter's token-based fallback is used as before.
+    const budget = syllableCount > 0 ? syllableCount - blankCount : 0;
+    const split = splitPinyinTranslation(rawLine, budget);
     // Prefer the full pinyin from the romanization line, else subtitle translit.
     rawPinyin = split.pinyin || translitPinyin;
     rawTranslation = split.translation || cleanTranslation(rawLine, translitPinyin);

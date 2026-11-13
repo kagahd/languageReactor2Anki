@@ -155,6 +155,10 @@ describe('isGlossLine', () => {
     expect(isGlossLine('wǒ shì xīn shǒu Ich bin neu')).toBe(false);
     expect(isGlossLine(`tā shuō ${LQ}hallo${RQ}`)).toBe(false); // quote not at the start
   });
+  it('is false for a quote-wrapped translation (first token is not pinyin)', () => {
+    expect(isGlossLine(`${LQ}Ich bin ein Neuling.${RQ}`)).toBe(false);
+    expect(isGlossLine(`${LQ}welcome${RQ}`)).toBe(false);
+  });
 });
 
 describe('stripBlankPlaceholders', () => {
