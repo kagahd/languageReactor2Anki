@@ -102,11 +102,14 @@ toolbar icon.
 - **Translation language: a Latin-script language** (e.g. German or English) — the meaning shown on
   the card.
 - **Show transliterations: "With original form"** (German UI: *Transliterationen anzeigen → Mit
-  Originalform*) — this is how the **sentence Pinyin** is captured: LR renders each subtitle word as
-  Pinyin **plus** its original Hanzi, and the extension reads the Pinyin per syllable. The other two
-  modes drop the sentence Pinyin: *"No transliterations"* shows none, and *"Only transliterations"*
-  renders the Pinyin in a different structure the extension does not read. If LR shows the subtitle as
-  Chinese only (no Pinyin), cards come out without sentence Pinyin.
+  Originalform*) — the verified way to capture the **sentence Pinyin**. LR renders each subtitle word
+  as Pinyin **plus** its original Hanzi, which the extension reads per syllable. (The extension also
+  reads a Pinyin reading from LR's romanization/translation line and prefers it when present, but in
+  testing that line carried only the translation, so the per-word transliteration was the actual
+  source.) The other two modes do not provide the per-word Pinyin: *"No transliterations"* shows none,
+  and *"Only transliterations"* renders it in a structure the extension does not read. With a
+  Chinese-only subtitle and no Pinyin on the translation line either, cards come out without sentence
+  Pinyin.
 
   Note what does **not** depend on this: the **sentence Hanzi** is always captured, and the **Pinyin,
   translation and meanings of the word you looked up** come from the dictionary panel. So only the
