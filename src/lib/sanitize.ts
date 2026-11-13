@@ -51,18 +51,18 @@ export function cjkCount(s: string): number {
 }
 
 /**
- * True if a subtitle line is pure romanization: it has Latin/pinyin letters
- * (incl. toned vowels) but NO CJK ideograph. LR sometimes renders such a line
- * before the Hanzi line, and its tokens (e.g. a bare number like "6" from "6岁")
- * would otherwise leak into the sentence. A digit/punctuation-only continuation
- * line (no Latin letters) is NOT romanization and must be kept, so it is
- * identified positively by the presence of Latin letters, not merely by the
- * absence of CJK.
+ * True if a subtitle line is pure romanization: it has NO CJK ideograph and its
+ * loose Latin tokens (pinyin rendered as standalone spans, separate from any
+ * Hanzi) are ALL pinyin syllables. LR sometimes renders such a line before the
+ * Hanzi line; its tokens (e.g. a bare number like "6" from "6岁") would otherwise
+ * leak into the sentence. A numeric/unit continuation line of a real sentence
+ * ("30", "3.5kg") has no loose pinyin tokens - or non-pinyin ones - so it is
+ * identified positively as pinyin rather than merely "Latin and no CJK".
  */
-export function isRomanizationOnly(lineHanzi: string): boolean {
-  const hasLatin = /[A-Za-zÀ-ɏ]/.test(lineHanzi);
-  const hasCjk = /[㐀-鿿]/u.test(lineHanzi);
-  return hasLatin && !hasCjk;
+export function isRomanizationLine(lineHanzi: string, looseLatinTokens: string[]): boolean {
+  if (/[㐀-鿿]/u.test(lineHanzi)) return false;
+  if (looseLatinTokens.length === 0) return false;
+  return looseLatinTokens.every((t) => isPinyin(t));
 }
 
 /**
@@ -169,7 +169,11 @@ export function isGlossLine(line: string): boolean {
   if (!m || m[1] === undefined) return false;
   const inner = m[1].trim();
   if (!inner) return false;
-  return inner.split(/\s+/).every((t) => isPinyin(t) || isNumericToken(t));
+  const tokens = inner.split(/\s+/);
+  // Every token must be pinyin or a number, AND at least one real pinyin token
+  // must be present - otherwise a number-only quoted translation (e.g. \u201E30\u201C
+  // Sekunden) would wrongly count as a pinyin gloss and lose its quotes.
+  return tokens.some((t) => isPinyin(t)) && tokens.every((t) => isPinyin(t) || isNumericToken(t));
 }
 
 /**

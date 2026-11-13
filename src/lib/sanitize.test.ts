@@ -4,7 +4,7 @@ import {
   cleanTranslation,
   isGlossLine,
   isNumericToken,
-  isRomanizationOnly,
+  isRomanizationLine,
   keepHanzi,
   keepPinyin,
   looksLikePinyin,
@@ -94,18 +94,23 @@ describe('isNumericToken', () => {
   });
 });
 
-describe('isRomanizationOnly', () => {
-  it('flags a pinyin-only romanization line (Latin, no CJK)', () => {
-    expect(isRomanizationOnly(`${LQ}wǒ 6 suì de shí hòu${RQ}`)).toBe(true);
-    expect(isRomanizationOnly('wǒ shì xīn shǒu')).toBe(true);
+describe('isRomanizationLine', () => {
+  it('flags a line whose loose Latin tokens are all pinyin (no CJK)', () => {
+    expect(isRomanizationLine(`${LQ}wǒ6suìdeshíhòu${RQ}`, ['wǒ', 'suì', 'de', 'shí', 'hòu'])).toBe(
+      true,
+    );
   });
   it('keeps a Hanzi line (has CJK)', () => {
-    expect(isRomanizationOnly('我6岁的时候')).toBe(false);
-    expect(isRomanizationOnly('wǒ 我')).toBe(false); // interleaved pinyin+Hanzi
+    expect(isRomanizationLine('我6岁的时候', [])).toBe(false);
+    expect(isRomanizationLine('wǒ我', [])).toBe(false); // interleaved: pinyin is not a loose token
   });
-  it('keeps a numeric/punctuation-only continuation line (no Latin)', () => {
-    expect(isRomanizationOnly('30')).toBe(false);
-    expect(isRomanizationOnly('，。')).toBe(false);
+  it('keeps a numeric/punctuation continuation line (no loose Latin tokens)', () => {
+    expect(isRomanizationLine('30', [])).toBe(false);
+    expect(isRomanizationLine('，。', [])).toBe(false);
+  });
+  it('keeps a unit/identifier continuation line (loose Latin but not pinyin)', () => {
+    // "重量是" + newline + "3.5kg": the "3.5kg" token is not pinyin -> not romanization.
+    expect(isRomanizationLine('3.5kg', ['3.5kg'])).toBe(false);
   });
 });
 
@@ -228,6 +233,10 @@ describe('isGlossLine', () => {
   });
   it('detects a German-quoted gloss (opening „, closing “) with a number inside', () => {
     expect(isGlossLine(`${GLQ}wǒ 6 suì de shí hòu${LQ} Als ich 6 Jahre alt war`)).toBe(true);
+  });
+  it('is false for a number-only quoted translation (no real pinyin token)', () => {
+    expect(isGlossLine(`${GLQ}30${LQ} Sekunden.`)).toBe(false);
+    expect(isGlossLine(`${LQ}30${RQ} seconds`)).toBe(false);
   });
   it('is false for a normal line, even if its translation contains quotes', () => {
     expect(isGlossLine('wǒ shì xīn shǒu Ich bin neu')).toBe(false);

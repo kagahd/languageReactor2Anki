@@ -3,7 +3,7 @@ import {
   cjkCount,
   cleanTranslation,
   isGlossLine,
-  isRomanizationOnly,
+  isRomanizationLine,
   keepHanzi,
   keepPinyin,
   splitGloss,
@@ -45,11 +45,11 @@ function readTokens(subText: Element): { hanzi: string; pinyin: string } {
   // line, separated by a `.lln-newline`. Collect tokens per line so a whole
   // romanization line can be dropped - otherwise a bare number in it (e.g. "6"
   // from "6岁") leaks into the Hanzi/Pinyin as a stray leading token.
-  const lines: Array<{ hanzi: string; pinyin: string[] }> = [];
-  let cur: { hanzi: string; pinyin: string[] } = { hanzi: '', pinyin: [] };
+  const lines: Array<{ hanzi: string; pinyin: string[]; loose: string[] }> = [];
+  let cur: { hanzi: string; pinyin: string[]; loose: string[] } = { hanzi: '', pinyin: [], loose: [] };
   const flush = () => {
     lines.push(cur);
-    cur = { hanzi: '', pinyin: [] };
+    cur = { hanzi: '', pinyin: [], loose: [] };
   };
 
   const tokens = subText.querySelectorAll(`:scope > ${SEL.word}, :scope > ${SEL.notWord}`);
@@ -60,8 +60,10 @@ function readTokens(subText: Element): { hanzi: string; pinyin: string } {
       return;
     }
     if (tok.classList.contains(SEL.notWord.slice(1))) {
-      // Satzzeichen
-      cur.hanzi += txt(tok);
+      // Satzzeichen - oder, in einer Romanisierungszeile, lose Pinyin-Silben.
+      const t = txt(tok);
+      cur.hanzi += t;
+      if (/[A-Za-zÀ-ɏ]/.test(t)) cur.loose.push(t);
       return;
     }
     const inners = tok.querySelectorAll(`:scope > ${SEL.translitInnerWrap}`);
@@ -79,10 +81,10 @@ function readTokens(subText: Element): { hanzi: string; pinyin: string } {
   flush();
 
   // Drop only lines positively identified as LR's separate romanization row
-  // (Latin/pinyin letters, no CJK). A numeric/punctuation-only continuation line
-  // of a real sentence (e.g. "编号是" + newline + "30") is kept. Fall back to all
-  // lines if every line looked like romanization (defensive).
-  const kept = lines.filter((l) => !isRomanizationOnly(l.hanzi));
+  // (loose Latin tokens that are all pinyin, no CJK). A numeric/unit continuation
+  // line of a real sentence (e.g. "编号是" + newline + "30", or "3.5kg") is kept.
+  // Fall back to all lines if every line looked like romanization (defensive).
+  const kept = lines.filter((l) => !isRomanizationLine(l.hanzi, l.loose));
   const use = kept.length ? kept : lines;
   return {
     hanzi: use.map((l) => l.hanzi).join(''),
