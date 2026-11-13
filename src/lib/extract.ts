@@ -90,6 +90,12 @@ function extractSentence(root: ParentNode): Sentence | null {
   // gloss and the plain-sentence split.
   const budget = syllableCount > 0 ? syllableCount - blankCount : 0;
 
+  // How many Arabic digits the sentence reading itself contains (the Hanzi keeps
+  // its digits). The splitter consumes at most this many digit characters into
+  // the pinyin, so a sentence-final reading number stays in the pinyin while a
+  // translation number ("...30 minutes.") does not get pulled in.
+  const readingDigits = (hanzi.match(/\d/g) ?? []).length;
+
   let rawPinyin: string;
   let rawTranslation: string;
   if (syllableCount > 0 && blankCount >= syllableCount) {
@@ -107,11 +113,11 @@ function extractSentence(root: ParentNode): Sentence | null {
     // budget: LR writes these lines messily (gluing a second word's pinyin after
     // the closing quote), so parsing the quotes directly loses pinyin - and the
     // subtitle translit is often incomplete too.
-    const g = splitGloss(rawLine, budget);
+    const g = splitGloss(rawLine, budget, readingDigits);
     rawPinyin = g.pinyin || translitPinyin;
     rawTranslation = g.translation;
   } else {
-    const split = splitPinyinTranslation(rawLine, budget);
+    const split = splitPinyinTranslation(rawLine, budget, readingDigits);
     // Prefer the full pinyin from the romanization line, else subtitle translit.
     rawPinyin = split.pinyin || translitPinyin;
     rawTranslation = split.translation || cleanTranslation(rawLine, translitPinyin);

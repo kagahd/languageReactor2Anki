@@ -153,26 +153,34 @@ describe('splitPinyinTranslation', () => {
     expect(r.pinyin).toBe('hái zi yǒu le zì jǐ de hái zi de shí hòu');
     expect(r.translation).toBe('Wenn das Kind selbst ein Kind hat');
   });
-  it('consumes a leading number (digits) as part of the pinyin, not the translation', () => {
-    // 师傅 card: LR writes "30" as "3 0" at the start of the reading. 分钟之内安装
-    // 空调的师傅就来了 = 14 Hanzi. The digits must not cut the pinyin to empty.
+  it('consumes a leading reading number (digits) into the pinyin, not the translation', () => {
+    // 师傅 card: LR writes "30" as "3 0" at the start of the reading; the Hanzi
+    // 30分钟之内安装空调的师傅就来了 = 14 ideographs + 2 digits. readingDigits=2.
     const r = splitPinyinTranslation(
       '3 0 fēn zhōng zhī nèi, ān zhuāng kōng tiáo de shī fu jiù lái le. Der Klimaanlagenmonteur traf innerhalb von 30 Minuten ein.',
       14,
+      2,
     );
     expect(r.pinyin).toBe('3 0 fēn zhōng zhī nèi, ān zhuāng kōng tiáo de shī fu jiù lái le.');
     expect(r.translation).toBe('Der Klimaanlagenmonteur traf innerhalb von 30 Minuten ein.');
   });
   it('does not label a leading number as pinyin when no pinyin follows', () => {
-    const r = splitPinyinTranslation('30 minutes later.', 0);
+    const r = splitPinyinTranslation('30 minutes later.', 0, 2);
     expect(r.pinyin).toBe('');
     expect(r.translation).toBe('30 minutes later.');
   });
-  it('keeps a sentence-final number in the pinyin, not the translation', () => {
-    // 编号是30。 = 3 Hanzi; the "30" is part of the reading, after the last syllable.
-    const r = splitPinyinTranslation('biān hào shì 30. Die Nummer ist 30.', 3);
+  it('keeps a sentence-final reading number in the pinyin (Hanzi has those digits)', () => {
+    // 编号是30。 = 3 ideographs + 2 digits; the "30" is part of the reading.
+    const r = splitPinyinTranslation('biān hào shì 30. Die Nummer ist 30.', 3, 2);
     expect(r.pinyin).toBe('biān hào shì 30.');
     expect(r.translation).toBe('Die Nummer ist 30.');
+  });
+  it('leaves a translation number in the translation when the reading has no digits', () => {
+    // 三十分钟 is written with Hanzi (no Arabic digits), so readingDigits=0: the
+    // "30" after the reading belongs to the translation, not the pinyin.
+    const r = splitPinyinTranslation('sān shí fēn zhōng. 30 minutes.', 4, 0);
+    expect(r.pinyin).toBe('sān shí fēn zhōng.');
+    expect(r.translation).toBe('30 minutes.');
   });
   it('treats U+FEFF as a separator, not a character to delete', () => {
     // Regression: U+FEFF matches \s in JS, so it must stay and be normalized to a

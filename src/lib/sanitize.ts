@@ -70,10 +70,19 @@ export function looksLikePinyin(token: string): boolean {
 /**
  * LRs Uebersetzungszeile hat die Form "<volles Pinyin> <Uebersetzung>".
  * Trennt beide anhand der erwarteten Silbenzahl (hanziCount) und Pinyin-Form.
+ *
+ * `readingDigits` is how many Arabic digit CHARACTERS the sentence reading
+ * contains (taken from the Hanzi, which keeps its digits). A number in the line
+ * is only consumed into the pinyin while that budget lasts; beyond it, a number
+ * belongs to the translation. This disambiguates a sentence-final reading number
+ * ("编号是30。" - Hanzi has "30") from a translation that merely starts with a
+ * number ("三十分钟" + "30 minutes." - Hanzi has no Arabic digits). Counting
+ * characters (not tokens) tolerates LR splitting "30" into "3 0".
  */
 export function splitPinyinTranslation(
   line: string,
   hanziCount: number,
+  readingDigits = 0,
 ): { pinyin: string; translation: string } {
   const cleaned = stripInvisible(line)
     .replace(/\s+/g, ' ')
@@ -90,16 +99,21 @@ export function splitPinyinTranslation(
   const hasCount = hanziCount > 0;
   let n = 0;
   let syllables = 0;
+  let digitsUsed = 0;
   let sawPinyin = false;
   while (n < words.length) {
     const w = words[n];
     if (w === undefined) break;
-    // A number written as digits (e.g. "30", or LR's split "3 0") belongs to the
-    // sentence reading, not the translation, and carries no pinyin syllable.
-    // Consume it transparently so it does not cut the pinyin prefix short - this
-    // also keeps a sentence-final number ("编号是30。" -> "biān hào shì 30.") in
-    // the pinyin instead of spilling it into the translation.
+    // A number written as digits (e.g. "30", or LR's split "3 0") carries no
+    // pinyin syllable. Consume it transparently - but only while the sentence
+    // reading still has unaccounted digits (readingDigits). That keeps a
+    // sentence-final reading number ("编号是30。" -> "biān hào shì 30.") in the
+    // pinyin, yet stops a translation number ("...30 minutes.") from being pulled
+    // in once the reading's own digits are used up.
     if (isNumericToken(w)) {
+      const d = (w.match(/\d/g) ?? []).length;
+      if (digitsUsed + d > readingDigits) break; // remaining number is translation
+      digitsUsed += d;
       n++;
       continue;
     }
@@ -153,11 +167,12 @@ export function isGlossLine(line: string): boolean {
 export function splitGloss(
   line: string,
   hanziCount: number,
+  readingDigits = 0,
 ): { pinyin: string; translation: string } {
   const stripped = line
     .replace(/[\u201C\u2018]/u, '') // first opening smart quote (the gloss opener)
     .replace(/[\u201D\u2019]/u, ' '); // first closing smart quote (the gloss closer)
-  return splitPinyinTranslation(stripped, hanziCount);
+  return splitPinyinTranslation(stripped, hanziCount, readingDigits);
 }
 
 /**
