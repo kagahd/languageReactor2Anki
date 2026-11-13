@@ -4,6 +4,7 @@ import {
   cleanTranslation,
   isGlossLine,
   keepHanzi,
+  parseGloss,
   keepPinyin,
   splitPinyinTranslation,
   stripBlankPlaceholders,
@@ -85,11 +86,12 @@ function extractSentence(root: ParentNode): Sentence | null {
   let rawPinyin: string;
   let rawTranslation: string;
   if (isGlossLine(rawLine)) {
-    // LR shows a word-gloss ("“shàng gè yuè” …"), not a sentence translation.
-    // Take the pinyin from the subtitle tokens and do NOT use the quoted gloss
-    // as the translation (the meaning is already on the card).
-    rawPinyin = translitPinyin;
-    rawTranslation = '';
+    // LR shows a word-gloss "“<pinyin>” <translation>". Take the pinyin from
+    // inside the quotes and the translation from after them - the subtitle
+    // translit is often incomplete for these lines.
+    const g = parseGloss(rawLine);
+    rawPinyin = g.pinyin || translitPinyin;
+    rawTranslation = g.translation;
   } else if (syllableCount > 0 && blankCount >= syllableCount) {
     // Every pinyin syllable was a blanked placeholder: there is no pinyin to
     // take from the romanization line, so the whole remainder is translation.

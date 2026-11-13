@@ -6,6 +6,7 @@ import {
   keepHanzi,
   keepPinyin,
   looksLikePinyin,
+  parseGloss,
   splitPinyinTranslation,
   stripBlankPlaceholders,
   stripInvisible,
@@ -161,6 +162,34 @@ describe('isGlossLine', () => {
   it('is false for a quote-wrapped translation (first token is not pinyin)', () => {
     expect(isGlossLine(`${LQ}Ich bin ein Neuling.${RQ}`)).toBe(false);
     expect(isGlossLine(`${LQ}welcome${RQ}`)).toBe(false);
+  });
+});
+
+describe('parseGloss', () => {
+  it('extracts the inner pinyin and the trailing translation', () => {
+    // 一周前: “yì zhōu qián” Vor einer Woche
+    expect(parseGloss(`${LQ}yì zhōu qián${RQ} Vor einer Woche`)).toEqual({
+      pinyin: 'yì zhōu qián',
+      translation: 'Vor einer Woche',
+    });
+    // 上个月: “shàng gè yuè” "letzten Monat"
+    expect(parseGloss(`${LQ}shàng gè yuè${RQ} "letzten Monat"`)).toEqual({
+      pinyin: 'shàng gè yuè',
+      translation: '"letzten Monat"',
+    });
+  });
+  it('handles spaces inside the quotes and content after the gloss', () => {
+    // 去年或者: “ qù nián ” huò zhě "Letztes Jahr" oder
+    expect(parseGloss(`${LQ} qù nián ${RQ} huò zhě "Letztes Jahr" oder`)).toEqual({
+      pinyin: 'qù nián',
+      translation: 'huò zhě "Letztes Jahr" oder',
+    });
+  });
+  it('returns empty fields when there is no closing quote', () => {
+    expect(parseGloss(`${LQ}yì zhōu qián Vor einer Woche`)).toEqual({
+      pinyin: '',
+      translation: '',
+    });
   });
 });
 

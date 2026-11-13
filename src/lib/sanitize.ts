@@ -84,9 +84,9 @@ export function splitPinyinTranslation(
 /**
  * True if the romanization line is an LR word-gloss rather than a sentence
  * translation: LR wraps a looked-up word's pinyin in CJK/"smart" quotes and the
- * line starts with the opening quote (e.g. “shàng gè yuè” "letzten Monat"). Such
- * a line is not a usable sentence, so the caller takes the pinyin from the
- * subtitle tokens and does not pull the gloss into the translation.
+ * line starts with the opening quote (e.g. “shàng gè yuè” "letzten Monat"). The
+ * caller then uses parseGloss() to take the pinyin from inside the quotes and
+ * the translation from after them, instead of the normal sentence split.
  */
 export function isGlossLine(line: string): boolean {
   // Must open with a CJK/"smart" quote AND wrap pinyin - the first token after
@@ -100,6 +100,17 @@ export function isGlossLine(line: string): boolean {
     .replace(/^[\u201C\u201D\u2018\u2019]+/u, '')
     .replace(/[\u201C\u201D\u2018\u2019.,!?;:\u2026\u00B7\uFF0C\u3002\uFF01\uFF1F\u3001]+$/u, '');
   return isPinyin(first);
+}
+
+/**
+ * Parses an LR word-gloss line "“ <pinyin> ” <translation>" into its inner
+ * pinyin (from between the quotes) and the trailing translation (after the
+ * closing quote). Only meaningful for a line where isGlossLine(line) is true.
+ */
+export function parseGloss(line: string): { pinyin: string; translation: string } {
+  const m = /^\s*[\u201C\u2018]\s*([^\u201D\u2019]*)[\u201D\u2019]\s*(.*)$/u.exec(line);
+  if (!m) return { pinyin: '', translation: '' };
+  return { pinyin: (m[1] ?? '').trim(), translation: (m[2] ?? '').trim() };
 }
 
 /**
