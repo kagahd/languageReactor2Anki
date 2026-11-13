@@ -147,11 +147,14 @@ export function isGlossLine(line: string): boolean {
   // with a pinyin-looking word (e.g. \u201Cdie Katze\u201D - "die" looks like pinyin but
   // "Katze" does not) as well as an ordinary quoted translation (\u201CIch bin...\u201D)
   // and an unclosed quote - all of which must flow through the normal split.
-  const m = /^\s*[\u201C\u2018]([^\u201C\u201D\u2018\u2019]*)[\u201D\u2019]/u.exec(line);
+  // Openers include the German low quote \u201E (U+201E); closers include the German
+  // closing quote \u201C (U+201C), which doubles as the English/CJK opener. Each inner
+  // token must be pinyin or a number ("\u201Ew\u01D2 6 su\u00EC\u2026\u201C" has a digit in the reading).
+  const m = /^\s*[\u201E\u201C\u2018]([^\u201E\u201C\u201D\u2018\u2019]*)[\u201D\u201C\u2019]/u.exec(line);
   if (!m || m[1] === undefined) return false;
   const inner = m[1].trim();
   if (!inner) return false;
-  return inner.split(/\s+/).every((t) => isPinyin(t));
+  return inner.split(/\s+/).every((t) => isPinyin(t) || isNumericToken(t));
 }
 
 /**
@@ -170,8 +173,8 @@ export function splitGloss(
   readingDigits = 0,
 ): { pinyin: string; translation: string } {
   const stripped = line
-    .replace(/[\u201C\u2018]/u, '') // first opening smart quote (the gloss opener)
-    .replace(/[\u201D\u2019]/u, ' '); // first closing smart quote (the gloss closer)
+    .replace(/[\u201E\u201C\u2018]/u, '') // first opening quote (incl. German \u201E and English/CJK \u201C)
+    .replace(/[\u201D\u201C\u2019]/u, ' '); // first closing quote (incl. German closing \u201C)
   return splitPinyinTranslation(stripped, hanziCount, readingDigits);
 }
 

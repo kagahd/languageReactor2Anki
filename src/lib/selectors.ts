@@ -18,6 +18,9 @@ export const SEL = {
   // --- Bausteine innerhalb eines Wort-/Satz-Tokens ---
   word: '.lln-word',
   notWord: '.lln-not-word',
+  // Zeilenumbruch zwischen Untertitel-Zeilen. LR rendert manchmal eine reine
+  // Romanisierungszeile VOR der Hanzi-Zeile (durch .lln-newline getrennt).
+  newline: '.lln-newline',
   translitInnerWrap: '.zh-translit-inner-wrap',
   translit: '.translit',
 } as const;

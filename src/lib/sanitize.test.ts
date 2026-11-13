@@ -15,8 +15,9 @@ import {
 } from './sanitize';
 
 // CJK/"smart" double quotes LR wraps around a word's pinyin gloss.
-const LQ = String.fromCharCode(0x201c); // “
+const LQ = String.fromCharCode(0x201c); // “ (English/CJK opener; also the German closer)
 const RQ = String.fromCharCode(0x201d); // ”
+const GLQ = String.fromCharCode(0x201e); // „ (German opening low quote)
 
 // Zero-width space LR mixes between syllables (it does not match \s).
 const ZWSP = String.fromCharCode(0x200b); // U+200B ZERO WIDTH SPACE
@@ -209,6 +210,9 @@ describe('isGlossLine', () => {
   it('detects a single-token gloss even with trailing punctuation', () => {
     expect(isGlossLine(`${LQ}hǎo${RQ}, "gut"`)).toBe(true);
   });
+  it('detects a German-quoted gloss (opening „, closing “) with a number inside', () => {
+    expect(isGlossLine(`${GLQ}wǒ 6 suì de shí hòu${LQ} Als ich 6 Jahre alt war`)).toBe(true);
+  });
   it('is false for a normal line, even if its translation contains quotes', () => {
     expect(isGlossLine('wǒ shì xīn shǒu Ich bin neu')).toBe(false);
     expect(isGlossLine(`tā shuō ${LQ}hallo${RQ}`)).toBe(false); // quote not at the start
@@ -259,6 +263,13 @@ describe('splitGloss', () => {
     expect(splitGloss(`${LQ}hǎo${RQ} Er sagte ${LQ}gut${RQ}.`, 1)).toEqual({
       pinyin: 'hǎo',
       translation: `Er sagte ${LQ}gut${RQ}.`,
+    });
+  });
+  it('splits a German-quoted gloss („…“) and keeps the reading number', () => {
+    // 我6岁的时候 = 5 ideographs + 1 digit (readingDigits=1).
+    expect(splitGloss(`${GLQ}wǒ 6 suì de shí hòu${LQ} Als ich 6 Jahre alt war`, 5, 1)).toEqual({
+      pinyin: 'wǒ 6 suì de shí hòu',
+      translation: 'Als ich 6 Jahre alt war',
     });
   });
   it('does not pull a translation word into a blank-adjusted gloss budget', () => {

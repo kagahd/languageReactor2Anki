@@ -40,30 +40,52 @@ function hanziFromKey(word: Element): string {
  * und baut Hanzi (ohne Leerzeichen) sowie Pinyin (silbenweise, Space-getrennt).
  */
 function readTokens(subText: Element): { hanzi: string; pinyin: string } {
-  let hanzi = '';
-  const pinyinParts: string[] = [];
+  // LR sometimes renders a pure romanization line (pinyin only) BEFORE the Hanzi
+  // line, separated by a `.lln-newline`. Collect tokens per line so a whole
+  // romanization line can be dropped - otherwise a bare number in it (e.g. "6"
+  // from "6岁") leaks into the Hanzi/Pinyin as a stray leading token.
+  const lines: Array<{ hanzi: string; pinyin: string[] }> = [];
+  let cur: { hanzi: string; pinyin: string[] } = { hanzi: '', pinyin: [] };
+  const flush = () => {
+    lines.push(cur);
+    cur = { hanzi: '', pinyin: [] };
+  };
 
   const tokens = subText.querySelectorAll(`:scope > ${SEL.word}, :scope > ${SEL.notWord}`);
   tokens.forEach((tok) => {
+    if (tok.classList.contains(SEL.newline.slice(1))) {
+      // Line boundary (the newline span also carries .lln-not-word).
+      flush();
+      return;
+    }
     if (tok.classList.contains(SEL.notWord.slice(1))) {
       // Satzzeichen
-      hanzi += txt(tok);
+      cur.hanzi += txt(tok);
       return;
     }
     const inners = tok.querySelectorAll(`:scope > ${SEL.translitInnerWrap}`);
     if (inners.length) {
       inners.forEach((w) => {
-        hanzi += directText(w);
+        cur.hanzi += directText(w);
         const tr = w.querySelector(`:scope > ${SEL.translit}`);
-        if (tr) pinyinParts.push(txt(tr));
+        if (tr) cur.pinyin.push(txt(tr));
       });
     } else {
       // Beispiel-Tokens haben oft nur Klartext-Hanzi ohne Translit-Wrap.
-      hanzi += hanziFromKey(tok) || txt(tok);
+      cur.hanzi += hanziFromKey(tok) || txt(tok);
     }
   });
+  flush();
 
-  return { hanzi, pinyin: pinyinParts.join(' ') };
+  // A Chinese sentence line always contains a CJK ideograph; a line without one
+  // is LR's separate romanization row and is dropped. Fall back to all lines if
+  // none qualifies (defensive - should not happen for Chinese).
+  const withCjk = lines.filter((l) => /[㐀-鿿]/u.test(l.hanzi));
+  const use = withCjk.length ? withCjk : lines;
+  return {
+    hanzi: use.map((l) => l.hanzi).join(''),
+    pinyin: use.flatMap((l) => l.pinyin).join(' '),
+  };
 }
 
 function extractSentence(root: ParentNode): Sentence | null {
