@@ -94,7 +94,11 @@ export function isGlossLine(line: string): boolean {
   // (e.g. \u201CIch bin ein Neuling.\u201D), which must flow through the normal split.
   const m = /^\s*[\u201C\u2018]\s*(\S+)/u.exec(line);
   if (!m || m[1] === undefined) return false;
-  const first = m[1].replace(/[\u201C\u201D\u2018\u2019]+$/u, '');
+  // Strip quotes AND trailing/leading punctuation from the first token, so a
+  // single-token gloss like \u201Ch\u01CEo\u201D, "gut" (token "h\u01CEo\u201D,") is still recognized.
+  const first = m[1]
+    .replace(/^[\u201C\u201D\u2018\u2019]+/u, '')
+    .replace(/[\u201C\u201D\u2018\u2019.,!?;:\u2026\u00B7\uFF0C\u3002\uFF01\uFF1F\u3001]+$/u, '');
   return isPinyin(first);
 }
 

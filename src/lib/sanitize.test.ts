@@ -151,6 +151,9 @@ describe('isGlossLine', () => {
     expect(isGlossLine(`${LQ}shàng gè yuè${RQ} "letzten Monat"`)).toBe(true);
     expect(isGlossLine(`${LQ} qù nián ${RQ} huò zhě`)).toBe(true);
   });
+  it('detects a single-token gloss even with trailing punctuation', () => {
+    expect(isGlossLine(`${LQ}hǎo${RQ}, "gut"`)).toBe(true);
+  });
   it('is false for a normal line, even if its translation contains quotes', () => {
     expect(isGlossLine('wǒ shì xīn shǒu Ich bin neu')).toBe(false);
     expect(isGlossLine(`tā shuō ${LQ}hallo${RQ}`)).toBe(false); // quote not at the start
