@@ -68,31 +68,56 @@ export function splitPinyinTranslation(
   let syllables = 0;
   let opened = 0; // CJK/"smart" quotes opened around a pinyin gloss
   let i = 0;
-  // LR wraps a word's pinyin gloss in CJK/"smart" quotes. These are peeled only
-  // in the PINYIN region and kept out of the pinyin output; the translation is
-  // never altered, so real quotes in any language stay intact.
+  // LR wraps a word's pinyin gloss in CJK/"smart" quotes (open “‘ / close ”’).
+  // Quotes are peeled only in the PINYIN region and kept out of the pinyin
+  // output; the translation is never altered, so real quotes in any language
+  // survive. A "‹quote›…‹quote›" span is treated as a gloss ONLY when every
+  // token inside it is pinyin - otherwise it is a quoted translation and the
+  // split stops, keeping the quotes in the translation.
   const OPEN_Q = /[\u201C\u2018]/;
   const CLOSE_Q = /[\u201D\u2019]/;
   const peel = (w: string) => w.replace(/^[\u201C\u201D\u2018\u2019]+|[\u201C\u201D\u2018\u2019]+$/gu, '');
+  const glossSpanIsPinyin = (open: number): boolean => {
+    let close = -1;
+    for (let j = open; j < words.length; j++) {
+      const t = words[j];
+      if (t === undefined) break;
+      if (j === open) {
+        if (CLOSE_Q.test(t.replace(/^[\u201C\u2018]+/u, ''))) {
+          close = j;
+          break;
+        }
+      } else if (CLOSE_Q.test(t)) {
+        close = j;
+        break;
+      }
+    }
+    if (close === -1) return false; // no matching closing quote -> not a gloss
+    for (let k = open; k <= close; k++) {
+      const core = peel(words[k] ?? '');
+      if (core === '') continue; // the quote delimiters themselves
+      if (!isPinyin(core)) return false; // span contains non-pinyin -> translation
+    }
+    return true;
+  };
   for (; i < words.length; i++) {
     const w = words[i];
     if (w === undefined) break;
+    // A token that OPENS a CJK quote: only a fully-pinyin quoted span (and only
+    // while pinyin is still expected) is a gloss; otherwise stop - it opens the
+    // translation, which must keep its quote.
+    if (/^[\u201C\u2018]/u.test(w)) {
+      const moreExpected = !hasCount || syllables < hanziCount;
+      if (!moreExpected || !glossSpanIsPinyin(i)) break;
+    }
     const token = peel(w);
     if (token === '') {
-      // A pure quote token.
+      // Pure quote token. An opening quote here was validated as a gloss above.
       if (OPEN_Q.test(w)) {
-        // An opening quote is gloss markup only if a matching closing quote
-        // follows AND more pinyin is still expected; otherwise it opens the
-        // translation and the split stops (the quote stays in the translation).
-        const hasClose = words.slice(i + 1).some((t) => CLOSE_Q.test(t));
-        const moreExpected = !hasCount || syllables < hanziCount;
-        if (hasClose && moreExpected) {
-          opened++;
-          continue;
-        }
-        break;
+        opened++;
+        continue;
       }
-      // A closing quote: consume it only if it closes a gloss we opened (even at
+      // Closing quote: consume it only if it closes a gloss we opened (even at
       // the syllable budget); otherwise it belongs to the translation.
       if (opened > 0) {
         opened--;

@@ -138,6 +138,19 @@ describe('splitPinyinTranslation', () => {
     expect(r.pinyin).toBe('wǒ xǐ de');
     expect(r.translation).toBe('ma maison.');
   });
+  it('keeps a quoted TRANSLATION span (not pinyin) intact, incl. the opening quote', () => {
+    // 一点儿 (3 Hanzi, erhua): the quoted span "A little" is not pinyin, so it is
+    // a quoted translation - the opening “ must not be discarded.
+    const r = splitPinyinTranslation(`yì diǎnr ${LQ} A little ${RQ}`, 3);
+    expect(r.pinyin).toBe('yì diǎnr');
+    expect(r.translation).toBe(`${LQ} A little ${RQ}`);
+  });
+  it('does not eat a pinyin-segmentable word from a glued quoted translation', () => {
+    // "a" segments as pinyin, but the span "a little" is not all-pinyin -> keep it.
+    const r = splitPinyinTranslation(`yì diǎnr ${LQ}a little${RQ}`, 3);
+    expect(r.pinyin).toBe('yì diǎnr');
+    expect(r.translation).toBe(`${LQ}a little${RQ}`);
+  });
   it('stops at the Hanzi syllable count with a glued token + lowercase translation', () => {
     // 8 Hanzi, "depín" is one token = two syllables, translation starts lowercase.
     const r = splitPinyinTranslation('huān yíng lái dào wǒ depín dào welcome to my channel.', 8);
