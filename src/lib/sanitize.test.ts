@@ -7,6 +7,7 @@ import {
   keepHanzi,
   keepPinyin,
   looksLikePinyin,
+  selectSentenceLines,
   splitGloss,
   splitPinyinTranslation,
   stripBlankPlaceholders,
@@ -15,8 +16,9 @@ import {
 } from './sanitize';
 
 // CJK/"smart" double quotes LR wraps around a word's pinyin gloss.
-const LQ = String.fromCharCode(0x201c); // “
+const LQ = String.fromCharCode(0x201c); // “ (English/CJK opener; also the German closer)
 const RQ = String.fromCharCode(0x201d); // ”
+const GLQ = String.fromCharCode(0x201e); // „ (German opening low quote)
 
 // Zero-width space LR mixes between syllables (it does not match \s).
 const ZWSP = String.fromCharCode(0x200b); // U+200B ZERO WIDTH SPACE
@@ -89,6 +91,51 @@ describe('isNumericToken', () => {
     expect(isNumericToken('shī')).toBe(false);
     expect(isNumericToken('3rd')).toBe(false);
     expect(isNumericToken(',')).toBe(false);
+  });
+});
+
+describe('selectSentenceLines', () => {
+  const join = (lines: ReturnType<typeof selectSentenceLines>) => ({
+    hanzi: lines.map((l) => l.hanzi).join(''),
+    pinyin: lines.flatMap((l) => l.pinyin).join(' '),
+  });
+
+  it('drops a long romanization row that duplicates the Hanzi reading', () => {
+    const rom = { hanzi: `${LQ}6suìdeshíhòuwǒ${RQ}`, pinyin: ['6'], loose: ['wǒ', 'suì', 'de', 'shí', 'hòu'] };
+    const han = { hanzi: `${LQ}我6岁的时候${RQ}`, pinyin: ['wǒ', '6', 'suì', 'de', 'shí', 'hòu'], loose: [] };
+    expect(join(selectSentenceLines([rom, han]))).toEqual({
+      hanzi: `${LQ}我6岁的时候${RQ}`,
+      pinyin: 'wǒ 6 suì de shí hòu',
+    });
+  });
+  it('drops a single-syllable romanization row that duplicates the Hanzi reading', () => {
+    // "6 suì" + newline + "6岁": the rom row is a duplicate reading -> dropped (no "66岁").
+    const rom = { hanzi: `${LQ}6suì${RQ}`, pinyin: ['6'], loose: ['suì'] };
+    const han = { hanzi: `${LQ}6岁${RQ}`, pinyin: ['6', 'suì'], loose: [] };
+    expect(join(selectSentenceLines([rom, han]))).toEqual({ hanzi: `${LQ}6岁${RQ}`, pinyin: '6 suì' });
+  });
+  it('keeps a numeric/unit continuation line whose reading matches no Hanzi row', () => {
+    // "长度是" + newline + "3.5" + loose "m": not a transliteration duplicate -> kept.
+    const han = { hanzi: '长度是', pinyin: ['cháng', 'dù', 'shì'], loose: [] };
+    const cont = { hanzi: '3.5m', pinyin: ['3.5'], loose: ['m'] };
+    expect(join(selectSentenceLines([han, cont]))).toEqual({
+      hanzi: '长度是3.5m',
+      pinyin: 'cháng dù shì 3.5',
+    });
+  });
+  it('keeps a single interleaved line (no romanization row)', () => {
+    const only = { hanzi: '今天', pinyin: ['jīn', 'tiān'], loose: [] };
+    expect(selectSentenceLines([only])).toEqual([only]);
+  });
+  it('matches readings across different syllable boundaries (grouped / glued)', () => {
+    // rom row glues 的频 -> "depín" and groups the whole reading; the Hanzi row
+    // has per-syllable translits. syllabify normalizes both so the rom row drops.
+    const rom = { hanzi: `${LQ}wǒdepíndào${RQ}`, pinyin: [], loose: ['wǒ', 'depín', 'dào'] };
+    const han = { hanzi: `${LQ}我的频道${RQ}`, pinyin: ['wǒ', 'de', 'pín', 'dào'], loose: [] };
+    expect(join(selectSentenceLines([rom, han]))).toEqual({
+      hanzi: `${LQ}我的频道${RQ}`,
+      pinyin: 'wǒ de pín dào',
+    });
   });
 });
 
@@ -209,6 +256,13 @@ describe('isGlossLine', () => {
   it('detects a single-token gloss even with trailing punctuation', () => {
     expect(isGlossLine(`${LQ}hǎo${RQ}, "gut"`)).toBe(true);
   });
+  it('detects a German-quoted gloss (opening „, closing “) with a number inside', () => {
+    expect(isGlossLine(`${GLQ}wǒ 6 suì de shí hòu${LQ} Als ich 6 Jahre alt war`)).toBe(true);
+  });
+  it('is false for a number-only quoted translation (no real pinyin token)', () => {
+    expect(isGlossLine(`${GLQ}30${LQ} Sekunden.`)).toBe(false);
+    expect(isGlossLine(`${LQ}30${RQ} seconds`)).toBe(false);
+  });
   it('is false for a normal line, even if its translation contains quotes', () => {
     expect(isGlossLine('wǒ shì xīn shǒu Ich bin neu')).toBe(false);
     expect(isGlossLine(`tā shuō ${LQ}hallo${RQ}`)).toBe(false); // quote not at the start
@@ -259,6 +313,13 @@ describe('splitGloss', () => {
     expect(splitGloss(`${LQ}hǎo${RQ} Er sagte ${LQ}gut${RQ}.`, 1)).toEqual({
       pinyin: 'hǎo',
       translation: `Er sagte ${LQ}gut${RQ}.`,
+    });
+  });
+  it('splits a German-quoted gloss („…“) and keeps the reading number', () => {
+    // 我6岁的时候 = 5 ideographs + 1 digit (readingDigits=1).
+    expect(splitGloss(`${GLQ}wǒ 6 suì de shí hòu${LQ} Als ich 6 Jahre alt war`, 5, 1)).toEqual({
+      pinyin: 'wǒ 6 suì de shí hòu',
+      translation: 'Als ich 6 Jahre alt war',
     });
   });
   it('does not pull a translation word into a blank-adjusted gloss budget', () => {

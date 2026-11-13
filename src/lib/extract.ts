@@ -5,6 +5,7 @@ import {
   isGlossLine,
   keepHanzi,
   keepPinyin,
+  selectSentenceLines,
   splitGloss,
   splitPinyinTranslation,
   stripBlankPlaceholders,
@@ -12,6 +13,7 @@ import {
   trimEdgePunct,
 } from './sanitize';
 import { resegmentPinyin } from './resegment';
+import type { SubtitleLine } from './sanitize';
 import type { Meaning, Sentence, VideoSource, VocabCard } from './types';
 
 /** textContent, unsichtbare Zero-Width-Zeichen entfernt, Mehrfach-Whitespace zu
@@ -40,30 +42,52 @@ function hanziFromKey(word: Element): string {
  * und baut Hanzi (ohne Leerzeichen) sowie Pinyin (silbenweise, Space-getrennt).
  */
 function readTokens(subText: Element): { hanzi: string; pinyin: string } {
-  let hanzi = '';
-  const pinyinParts: string[] = [];
+  // LR sometimes renders a pure romanization line (pinyin only) BEFORE the Hanzi
+  // line, separated by a `.lln-newline`. Collect tokens per line so a whole
+  // romanization line can be dropped - otherwise a bare number in it (e.g. "6"
+  // from "6岁") leaks into the Hanzi/Pinyin as a stray leading token.
+  const lines: SubtitleLine[] = [];
+  let cur: SubtitleLine = { hanzi: '', pinyin: [], loose: [] };
+  const flush = () => {
+    lines.push(cur);
+    cur = { hanzi: '', pinyin: [], loose: [] };
+  };
 
   const tokens = subText.querySelectorAll(`:scope > ${SEL.word}, :scope > ${SEL.notWord}`);
   tokens.forEach((tok) => {
+    if (tok.classList.contains(SEL.newline.slice(1))) {
+      // Line boundary (the newline span also carries .lln-not-word).
+      flush();
+      return;
+    }
     if (tok.classList.contains(SEL.notWord.slice(1))) {
-      // Satzzeichen
-      hanzi += txt(tok);
+      // Satzzeichen - oder, in einer Romanisierungszeile, lose Pinyin-Silben.
+      const t = txt(tok);
+      cur.hanzi += t;
+      if (/[A-Za-zÀ-ɏ]/.test(t)) cur.loose.push(t);
       return;
     }
     const inners = tok.querySelectorAll(`:scope > ${SEL.translitInnerWrap}`);
     if (inners.length) {
       inners.forEach((w) => {
-        hanzi += directText(w);
+        cur.hanzi += directText(w);
         const tr = w.querySelector(`:scope > ${SEL.translit}`);
-        if (tr) pinyinParts.push(txt(tr));
+        if (tr) cur.pinyin.push(txt(tr));
       });
     } else {
       // Beispiel-Tokens haben oft nur Klartext-Hanzi ohne Translit-Wrap.
-      hanzi += hanziFromKey(tok) || txt(tok);
+      cur.hanzi += hanziFromKey(tok) || txt(tok);
     }
   });
+  flush();
 
-  return { hanzi, pinyin: pinyinParts.join(' ') };
+  // Drop LR's separate romanization row (a transliteration duplicate of the
+  // Hanzi row); keep numeric/unit continuation lines. See selectSentenceLines.
+  const use = selectSentenceLines(lines);
+  return {
+    hanzi: use.map((l) => l.hanzi).join(''),
+    pinyin: use.flatMap((l) => l.pinyin).join(' '),
+  };
 }
 
 function extractSentence(root: ParentNode): Sentence | null {

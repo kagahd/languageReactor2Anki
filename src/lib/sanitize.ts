@@ -50,6 +50,48 @@ export function cjkCount(s: string): number {
   return (s.match(/[㐀-鿿]/g) ?? []).length;
 }
 
+/** A tokenized subtitle line: concatenated Hanzi text, the per-word pinyin
+ *  syllables, and any loose pinyin tokens (standalone spans, not attached to a
+ *  Hanzi) LR renders on a separate romanization line. */
+export interface SubtitleLine {
+  hanzi: string;
+  pinyin: string[];
+  loose: string[];
+}
+
+/**
+ * Selects the real sentence lines from LR's tokenized subtitle lines, dropping a
+ * romanization row LR sometimes renders before the Hanzi row. Rather than a
+ * fragile per-line heuristic, a line WITHOUT a CJK ideograph is dropped only
+ * when its reading (word pinyin + loose pinyin tokens, compared as a multiset)
+ * equals the reading of a CJK line in the same subtitle - i.e. it is a redundant
+ * transliteration of that Hanzi line. This keeps numeric/unit continuation lines
+ * ("30", "3.5 kg", "3.5 m") whose reading matches no Hanzi line, and removes the
+ * romanization row (and its stray tokens, e.g. a bare "6" from "6岁") in both the
+ * long and the single-syllable case. Falls back to all lines if every line would
+ * be dropped (defensive).
+ */
+export function selectSentenceLines(lines: SubtitleLine[]): SubtitleLine[] {
+  const hasCjk = (l: SubtitleLine) => /[㐀-鿿]/u.test(l.hanzi);
+  // Normalize syllable boundaries before comparing: split on whitespace and run
+  // the conservative syllabify so a grouped ("shíhòu") or glued ("depín") span
+  // matches separate per-syllable entries ("shí","hòu" / "de","pín").
+  const readingKey = (l: SubtitleLine) =>
+    [...l.pinyin, ...l.loose]
+      .flatMap((t) => t.split(/\s+/))
+      .filter(Boolean)
+      .flatMap((t) => syllabify(t))
+      .sort()
+      .join('\u0001');
+  const cjkReadings = new Set(lines.filter((l) => hasCjk(l) && readingKey(l)).map(readingKey));
+  const kept = lines.filter((l) => {
+    if (hasCjk(l)) return true;
+    const k = readingKey(l);
+    return !(k && cjkReadings.has(k));
+  });
+  return kept.length ? kept : lines;
+}
+
 /**
  * A token made only of digits (plus optional separators), e.g. "30" or LR's
  * split "3" / "0". In a romanization line these are part of the sentence reading,
@@ -147,11 +189,18 @@ export function isGlossLine(line: string): boolean {
   // with a pinyin-looking word (e.g. \u201Cdie Katze\u201D - "die" looks like pinyin but
   // "Katze" does not) as well as an ordinary quoted translation (\u201CIch bin...\u201D)
   // and an unclosed quote - all of which must flow through the normal split.
-  const m = /^\s*[\u201C\u2018]([^\u201C\u201D\u2018\u2019]*)[\u201D\u2019]/u.exec(line);
+  // Openers include the German low quote \u201E (U+201E); closers include the German
+  // closing quote \u201C (U+201C), which doubles as the English/CJK opener. Each inner
+  // token must be pinyin or a number ("\u201Ew\u01D2 6 su\u00EC\u2026\u201C" has a digit in the reading).
+  const m = /^\s*[\u201E\u201C\u2018]([^\u201E\u201C\u201D\u2018\u2019]*)[\u201D\u201C\u2019]/u.exec(line);
   if (!m || m[1] === undefined) return false;
   const inner = m[1].trim();
   if (!inner) return false;
-  return inner.split(/\s+/).every((t) => isPinyin(t));
+  const tokens = inner.split(/\s+/);
+  // Every token must be pinyin or a number, AND at least one real pinyin token
+  // must be present - otherwise a number-only quoted translation (e.g. \u201E30\u201C
+  // Sekunden) would wrongly count as a pinyin gloss and lose its quotes.
+  return tokens.some((t) => isPinyin(t)) && tokens.every((t) => isPinyin(t) || isNumericToken(t));
 }
 
 /**
@@ -170,8 +219,8 @@ export function splitGloss(
   readingDigits = 0,
 ): { pinyin: string; translation: string } {
   const stripped = line
-    .replace(/[\u201C\u2018]/u, '') // first opening smart quote (the gloss opener)
-    .replace(/[\u201D\u2019]/u, ' '); // first closing smart quote (the gloss closer)
+    .replace(/[\u201E\u201C\u2018]/u, '') // first opening quote (incl. German \u201E and English/CJK \u201C)
+    .replace(/[\u201D\u201C\u2019]/u, ' '); // first closing quote (incl. German closing \u201C)
   return splitPinyinTranslation(stripped, hanziCount, readingDigits);
 }
 
