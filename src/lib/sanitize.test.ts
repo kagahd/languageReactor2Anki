@@ -4,6 +4,7 @@ import {
   cleanTranslation,
   isGlossLine,
   isNumericToken,
+  isRomanizationOnly,
   keepHanzi,
   keepPinyin,
   looksLikePinyin,
@@ -90,6 +91,21 @@ describe('isNumericToken', () => {
     expect(isNumericToken('shī')).toBe(false);
     expect(isNumericToken('3rd')).toBe(false);
     expect(isNumericToken(',')).toBe(false);
+  });
+});
+
+describe('isRomanizationOnly', () => {
+  it('flags a pinyin-only romanization line (Latin, no CJK)', () => {
+    expect(isRomanizationOnly(`${LQ}wǒ 6 suì de shí hòu${RQ}`)).toBe(true);
+    expect(isRomanizationOnly('wǒ shì xīn shǒu')).toBe(true);
+  });
+  it('keeps a Hanzi line (has CJK)', () => {
+    expect(isRomanizationOnly('我6岁的时候')).toBe(false);
+    expect(isRomanizationOnly('wǒ 我')).toBe(false); // interleaved pinyin+Hanzi
+  });
+  it('keeps a numeric/punctuation-only continuation line (no Latin)', () => {
+    expect(isRomanizationOnly('30')).toBe(false);
+    expect(isRomanizationOnly('，。')).toBe(false);
   });
 });
 

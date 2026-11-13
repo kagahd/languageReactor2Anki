@@ -3,6 +3,7 @@ import {
   cjkCount,
   cleanTranslation,
   isGlossLine,
+  isRomanizationOnly,
   keepHanzi,
   keepPinyin,
   splitGloss,
@@ -77,11 +78,12 @@ function readTokens(subText: Element): { hanzi: string; pinyin: string } {
   });
   flush();
 
-  // A Chinese sentence line always contains a CJK ideograph; a line without one
-  // is LR's separate romanization row and is dropped. Fall back to all lines if
-  // none qualifies (defensive - should not happen for Chinese).
-  const withCjk = lines.filter((l) => /[㐀-鿿]/u.test(l.hanzi));
-  const use = withCjk.length ? withCjk : lines;
+  // Drop only lines positively identified as LR's separate romanization row
+  // (Latin/pinyin letters, no CJK). A numeric/punctuation-only continuation line
+  // of a real sentence (e.g. "编号是" + newline + "30") is kept. Fall back to all
+  // lines if every line looked like romanization (defensive).
+  const kept = lines.filter((l) => !isRomanizationOnly(l.hanzi));
+  const use = kept.length ? kept : lines;
   return {
     hanzi: use.map((l) => l.hanzi).join(''),
     pinyin: use.flatMap((l) => l.pinyin).join(' '),

@@ -51,6 +51,21 @@ export function cjkCount(s: string): number {
 }
 
 /**
+ * True if a subtitle line is pure romanization: it has Latin/pinyin letters
+ * (incl. toned vowels) but NO CJK ideograph. LR sometimes renders such a line
+ * before the Hanzi line, and its tokens (e.g. a bare number like "6" from "6岁")
+ * would otherwise leak into the sentence. A digit/punctuation-only continuation
+ * line (no Latin letters) is NOT romanization and must be kept, so it is
+ * identified positively by the presence of Latin letters, not merely by the
+ * absence of CJK.
+ */
+export function isRomanizationOnly(lineHanzi: string): boolean {
+  const hasLatin = /[A-Za-zÀ-ɏ]/.test(lineHanzi);
+  const hasCjk = /[㐀-鿿]/u.test(lineHanzi);
+  return hasLatin && !hasCjk;
+}
+
+/**
  * A token made only of digits (plus optional separators), e.g. "30" or LR's
  * split "3" / "0". In a romanization line these are part of the sentence reading,
  * not the translation, and carry no pinyin syllable.
