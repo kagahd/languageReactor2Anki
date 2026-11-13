@@ -25,9 +25,16 @@ export function stripInvisible(s: string): string {
  * Hanzi-Feld fallen, waehrend Pinyin/Uebersetzung sie behalten. Das stoert die
  * Silbenzaehlung nicht (cjkCount zaehlt nur Ideogramme). Vollbreiten-Ziffern
  * (０-９) lagen schon im Vollbreiten-Bereich und blieben ohnehin erhalten.
+ *
+ * Ein Dezimaltrenner (Punkt/Komma) ZWISCHEN zwei Ziffern bleibt erhalten, damit
+ * der Zahlenwert stimmt (3.5 bleibt 3.5, wird nicht zu 35). Trenner an anderer
+ * Stelle werden entfernt.
  */
 export function keepHanzi(s: string): string {
-  return stripInvisible(s).replace(/[^0-9㐀-鿿　-〿＀-￯]/g, '').trim();
+  return stripInvisible(s)
+    .replace(/[^0-9.,㐀-鿿　-〿＀-￯]/g, '')
+    .replace(/(?<!\d)[.,]|[.,](?!\d)/g, '')
+    .trim();
 }
 
 /** Entfernt CJK-Zeichen (laesst Latein/Pinyin/Toene stehen). */
@@ -87,12 +94,11 @@ export function splitPinyinTranslation(
   while (n < words.length) {
     const w = words[n];
     if (w === undefined) break;
-    // Stop once the Hanzi syllable budget is reached, so a trailing number in
-    // the translation ("...von 30 Minuten") is not pulled into the pinyin.
-    if (hasCount && syllables >= hanziCount) break;
     // A number written as digits (e.g. "30", or LR's split "3 0") belongs to the
     // sentence reading, not the translation, and carries no pinyin syllable.
-    // Consume it transparently so it does not cut the pinyin prefix short.
+    // Consume it transparently so it does not cut the pinyin prefix short - this
+    // also keeps a sentence-final number ("编号是30。" -> "biān hào shì 30.") in
+    // the pinyin instead of spilling it into the translation.
     if (isNumericToken(w)) {
       n++;
       continue;
@@ -194,14 +200,16 @@ export function cleanTranslation(raw: string, pinyin: string): string {
  * removed, while a trailing terminator (。！？…) is kept. Punctuation INSIDE the
  * sentence always stays.
  *
- * A leading "digits + CJK punctuation" run is also an artifact: LR sometimes
- * prepends a stray number cut off by CJK punctuation ("30，。30分钟之内…"). That is
- * stripped too, but ONLY when the digits are followed by CJK punctuation - a
- * real leading number sits directly before a Hanzi (30分钟) or, in a translation,
- * before a space/ASCII ("30 Minuten"), so it is left untouched.
+ * LR also sometimes prepends a stray, DUPLICATED number cut off by CJK
+ * punctuation and then repeated as the real sentence start ("30，。30分钟之内…").
+ * Only that specific artifact is removed: a leading number + CJK punctuation is
+ * stripped ONLY when the same digits immediately follow it. A meaningful leading
+ * number (a list marker "1、准备好。", a response "30，没错。", or a plain "30分钟")
+ * is therefore kept.
  */
 export function trimEdgePunct(s: string): string {
   return s
-    .replace(/^(?:[\s，。、；：！？…·,.;:!?]+|\d+[，。、；：！？…·]+)+/u, '')
+    .replace(/^(\d+)[，。、；：！？…·]+(?=\1)/u, '')
+    .replace(/^[\s，。、；：！？…·,.;:!?]+/u, '')
     .replace(/[\s，、；：,;:]+$/u, '');
 }

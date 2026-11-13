@@ -39,6 +39,12 @@ describe('keepHanzi', () => {
     // Pinyin contamination is stripped, but the Arabic number stays with the Hanzi.
     expect(keepHanzi('sān shí fēn zhōng 30分钟之内')).toBe('30分钟之内');
   });
+  it('keeps a decimal separator between digits (does not change the value)', () => {
+    expect(keepHanzi('3.5分钟之内')).toBe('3.5分钟之内');
+    expect(keepHanzi('3,5公里')).toBe('3,5公里');
+    // a separator not between two digits is dropped
+    expect(keepHanzi('30.分钟')).toBe('30分钟');
+  });
 });
 
 describe('keepPinyin', () => {
@@ -162,6 +168,12 @@ describe('splitPinyinTranslation', () => {
     expect(r.pinyin).toBe('');
     expect(r.translation).toBe('30 minutes later.');
   });
+  it('keeps a sentence-final number in the pinyin, not the translation', () => {
+    // 编号是30。 = 3 Hanzi; the "30" is part of the reading, after the last syllable.
+    const r = splitPinyinTranslation('biān hào shì 30. Die Nummer ist 30.', 3);
+    expect(r.pinyin).toBe('biān hào shì 30.');
+    expect(r.translation).toBe('Die Nummer ist 30.');
+  });
   it('treats U+FEFF as a separator, not a character to delete', () => {
     // Regression: U+FEFF matches \s in JS, so it must stay and be normalized to a
     // space (keeping tokens apart) rather than be stripped (which would merge them).
@@ -271,11 +283,14 @@ describe('trimEdgePunct', () => {
   it('leaves clean text untouched', () => {
     expect(trimEdgePunct('两天前我见了一个好朋友')).toBe('两天前我见了一个好朋友');
   });
-  it('strips a leading "digits + CJK punctuation" artifact but keeps a real leading number', () => {
-    // 师傅 card: LR prepended a stray "30，。" before the real sentence.
+  it('strips only a DUPLICATED leading-number artifact, keeping meaningful numbers', () => {
+    // 师傅 card: LR prepended a stray "30，。" and then repeated "30" as the real start.
     expect(trimEdgePunct('30，。30分钟之内，安装空调的师傅就来了。')).toBe(
       '30分钟之内，安装空调的师傅就来了。',
     );
+    // A leading number NOT duplicated right after the punctuation is kept:
+    expect(trimEdgePunct('1、准备好。')).toBe('1、准备好。'); // list marker
+    expect(trimEdgePunct('30，没错。')).toBe('30，没错。'); // response
     // A real leading number directly before a Hanzi is kept.
     expect(trimEdgePunct('30分钟之内')).toBe('30分钟之内');
     // A translation starting with a number (digit + space/ASCII) is untouched.
