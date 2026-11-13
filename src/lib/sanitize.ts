@@ -89,33 +89,37 @@ export function splitPinyinTranslation(
  * syllable-count split, instead of the plain sentence split.
  */
 export function isGlossLine(line: string): boolean {
-  // Must open with a CJK/"smart" quote AND wrap pinyin - the first token after
-  // the quote has to be pinyin. This excludes an ordinary quoted translation
-  // (e.g. \u201CIch bin ein Neuling.\u201D), which must flow through the normal split.
-  const m = /^\s*[\u201C\u2018]\s*(\S+)/u.exec(line);
+  // Must open with a CJK/"smart" quote, have a matching closing quote, and the
+  // WHOLE span between them must be pinyin. Validating every token inside the
+  // quotes (not just the first) rejects a quoted translation that merely starts
+  // with a pinyin-looking word (e.g. \u201Cdie Katze\u201D - "die" looks like pinyin but
+  // "Katze" does not) as well as an ordinary quoted translation (\u201CIch bin...\u201D)
+  // and an unclosed quote - all of which must flow through the normal split.
+  const m = /^\s*[\u201C\u2018]([^\u201C\u201D\u2018\u2019]*)[\u201D\u2019]/u.exec(line);
   if (!m || m[1] === undefined) return false;
-  // Strip quotes AND trailing/leading punctuation from the first token, so a
-  // single-token gloss like \u201Ch\u01CEo\u201D, "gut" (token "h\u01CEo\u201D,") is still recognized.
-  const first = m[1]
-    .replace(/^[\u201C\u201D\u2018\u2019]+/u, '')
-    .replace(/[\u201C\u201D\u2018\u2019.,!?;:\u2026\u00B7\uFF0C\u3002\uFF01\uFF1F\u3001]+$/u, '');
-  return isPinyin(first);
+  const inner = m[1].trim();
+  if (!inner) return false;
+  return inner.split(/\s+/).every((t) => isPinyin(t));
 }
 
 /**
- * Extracts pinyin + translation from an LR word-gloss line by removing the gloss
- * quote markers and running the normal syllable-count split. LR writes these
- * lines messily - e.g. a two-word subtitle comes as "<q>qu nian<q> huo zhe \"X\" ...",
- * gluing the second word's pinyin and the gloss together. Stripping the markers
- * yields a plain line the split can separate into full pinyin and a clean
- * translation. Only the gloss markers are removed, so straight quotes in the
- * translation are preserved.
+ * Extracts pinyin + translation from an LR word-gloss line by removing ONLY the
+ * gloss's own delimiter quotes - the first opening smart quote and the first
+ * following closing smart quote - and running the normal syllable-count split.
+ * LR writes these lines messily: a two-word subtitle comes as
+ * "\u201Cq\u00F9 ni\u00E1n\u201D hu\u00F2 zh\u011B \"X\" ...", gluing the second word's pinyin after the
+ * closing quote, so the remainder must be re-split by syllable count rather than
+ * taken verbatim. Because only the two delimiter quotes are removed, any quotes
+ * inside the translation (straight OR smart, e.g. Er sagte \u201Cgut\u201D) are preserved.
  */
 export function splitGloss(
   line: string,
   hanziCount: number,
 ): { pinyin: string; translation: string } {
-  return splitPinyinTranslation(line.replace(/[\u201C\u201D\u2018\u2019]/gu, ''), hanziCount);
+  const stripped = line
+    .replace(/[\u201C\u2018]/u, '') // first opening smart quote (the gloss opener)
+    .replace(/[\u201D\u2019]/u, ' '); // first closing smart quote (the gloss closer)
+  return splitPinyinTranslation(stripped, hanziCount);
 }
 
 /**

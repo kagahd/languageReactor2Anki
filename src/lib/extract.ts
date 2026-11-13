@@ -83,30 +83,34 @@ function extractSentence(root: ParentNode): Sentence | null {
 
   const syllableCount = cjkCount(hanzi);
 
+  // Blanked syllables are gone from the romanization, so lower the pinyin budget
+  // by that many - otherwise the split would pull a translation word into the
+  // pinyin to fill the count (e.g. French "ma"). When the Hanzi count is unknown
+  // (0), the splitter's token-based fallback is used. This budget feeds both the
+  // gloss and the plain-sentence split.
+  const budget = syllableCount > 0 ? syllableCount - blankCount : 0;
+
   let rawPinyin: string;
   let rawTranslation: string;
-  if (isGlossLine(rawLine)) {
-    // LR shows a word-gloss "“<pinyin>” <translation>". Strip the gloss quote
-    // markers and run the normal syllable-count split: LR writes these lines
-    // messily (gluing a second word's pinyin to the gloss), so parsing the
-    // quotes directly loses pinyin - the subtitle translit is often incomplete
-    // too.
-    const g = splitGloss(rawLine, syllableCount);
-    rawPinyin = g.pinyin || translitPinyin;
-    rawTranslation = g.translation;
-  } else if (syllableCount > 0 && blankCount >= syllableCount) {
+  if (syllableCount > 0 && blankCount >= syllableCount) {
     // Every pinyin syllable was a blanked placeholder: there is no pinyin to
     // take from the romanization line, so the whole remainder is translation.
-    // (Passing budget 0 to the splitter would instead select its "unknown
-    // count" fallback and pull a translation word into the pinyin.)
+    // (Passing budget <= 0 to the splitter would instead select its "unknown
+    // count" fallback and pull a translation word into the pinyin.) A gloss line
+    // cannot reach here: its quoted pinyin would be blanked away, so isGlossLine
+    // is false once stripBlankPlaceholders empties the quotes.
     rawPinyin = translitPinyin;
     rawTranslation = rawLine;
+  } else if (isGlossLine(rawLine)) {
+    // LR shows a word-gloss "“<pinyin>” <translation>". Strip the gloss quote
+    // markers and run the syllable-count split with the SAME blank-adjusted
+    // budget: LR writes these lines messily (gluing a second word's pinyin after
+    // the closing quote), so parsing the quotes directly loses pinyin - and the
+    // subtitle translit is often incomplete too.
+    const g = splitGloss(rawLine, budget);
+    rawPinyin = g.pinyin || translitPinyin;
+    rawTranslation = g.translation;
   } else {
-    // Blanked syllables are gone from the romanization, so lower the pinyin
-    // budget by that many - otherwise the split would pull a translation word
-    // into the pinyin to fill the count (e.g. French "ma"). When the Hanzi count
-    // is unknown (0), the splitter's token-based fallback is used as before.
-    const budget = syllableCount > 0 ? syllableCount - blankCount : 0;
     const split = splitPinyinTranslation(rawLine, budget);
     // Prefer the full pinyin from the romanization line, else subtitle translit.
     rawPinyin = split.pinyin || translitPinyin;

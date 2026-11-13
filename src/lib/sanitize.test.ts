@@ -159,9 +159,15 @@ describe('isGlossLine', () => {
     expect(isGlossLine('wǒ shì xīn shǒu Ich bin neu')).toBe(false);
     expect(isGlossLine(`tā shuō ${LQ}hallo${RQ}`)).toBe(false); // quote not at the start
   });
-  it('is false for a quote-wrapped translation (first token is not pinyin)', () => {
+  it('is false for a quote-wrapped translation (a token inside is not pinyin)', () => {
     expect(isGlossLine(`${LQ}Ich bin ein Neuling.${RQ}`)).toBe(false);
     expect(isGlossLine(`${LQ}welcome${RQ}`)).toBe(false);
+    // lowercase start whose first word only LOOKS like pinyin ("die"), but the
+    // span as a whole is a German translation -> must not be taken as a gloss.
+    expect(isGlossLine(`${LQ}die Katze${RQ}`)).toBe(false);
+  });
+  it('is false for an unclosed opening quote', () => {
+    expect(isGlossLine(`${LQ}yì zhōu qián Vor einer Woche`)).toBe(false);
   });
 });
 
@@ -191,6 +197,21 @@ describe('splitGloss', () => {
     expect(splitGloss(`${LQ}hǎo${RQ} "gut"`, 1)).toEqual({
       pinyin: 'hǎo',
       translation: '"gut"',
+    });
+  });
+  it('keeps SMART quotes in the translation (only the gloss delimiters are removed)', () => {
+    // Only the first opening + first closing smart quote (the gloss's own
+    // delimiters) are stripped; smart quotes around a translation word stay.
+    expect(splitGloss(`${LQ}hǎo${RQ} Er sagte ${LQ}gut${RQ}.`, 1)).toEqual({
+      pinyin: 'hǎo',
+      translation: `Er sagte ${LQ}gut${RQ}.`,
+    });
+  });
+  it('does not pull a translation word into a blank-adjusted gloss budget', () => {
+    // 4 Hanzi, one blanked syllable -> budget 3, so French "ma" stays in translation.
+    expect(splitGloss(`${LQ}wǒ xǐ de${RQ} ma maison.`, 3)).toEqual({
+      pinyin: 'wǒ xǐ de',
+      translation: 'ma maison.',
     });
   });
 });
