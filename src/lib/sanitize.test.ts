@@ -112,6 +112,11 @@ describe('isRomanizationLine', () => {
     // "重量是" + newline + "3.5kg": the "3.5kg" token is not pinyin -> not romanization.
     expect(isRomanizationLine('3.5kg', ['3.5kg'])).toBe(false);
   });
+  it('keeps a numeric continuation with a lone valid-pinyin unit ("m")', () => {
+    // "长度是" + newline + "3.5" + loose "m": isPinyin("m") is true, but a single
+    // loose token is not a transliteration row -> kept.
+    expect(isRomanizationLine('3.5m', ['m'])).toBe(false);
+  });
 });
 
 describe('splitPinyinTranslation', () => {

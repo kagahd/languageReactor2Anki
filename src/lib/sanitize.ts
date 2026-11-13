@@ -61,7 +61,11 @@ export function cjkCount(s: string): number {
  */
 export function isRomanizationLine(lineHanzi: string, looseLatinTokens: string[]): boolean {
   if (/[㐀-鿿]/u.test(lineHanzi)) return false;
-  if (looseLatinTokens.length === 0) return false;
+  // A real transliteration row has several pinyin syllables. Require >= 2 so a
+  // lone valid-pinyin unit token in a numeric continuation row ("3.5" + a loose
+  // "m" for metre, which isPinyin accepts as a nasal syllable) does not trigger
+  // a drop.
+  if (looseLatinTokens.length < 2) return false;
   return looseLatinTokens.every((t) => isPinyin(t));
 }
 
