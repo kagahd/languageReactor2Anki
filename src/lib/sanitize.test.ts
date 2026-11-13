@@ -4,10 +4,10 @@ import {
   cleanTranslation,
   isGlossLine,
   isNumericToken,
-  isRomanizationLine,
   keepHanzi,
   keepPinyin,
   looksLikePinyin,
+  selectSentenceLines,
   splitGloss,
   splitPinyinTranslation,
   stripBlankPlaceholders,
@@ -94,28 +94,38 @@ describe('isNumericToken', () => {
   });
 });
 
-describe('isRomanizationLine', () => {
-  it('flags a line whose loose Latin tokens are all pinyin (no CJK)', () => {
-    expect(isRomanizationLine(`${LQ}wǒ6suìdeshíhòu${RQ}`, ['wǒ', 'suì', 'de', 'shí', 'hòu'])).toBe(
-      true,
-    );
+describe('selectSentenceLines', () => {
+  const join = (lines: ReturnType<typeof selectSentenceLines>) => ({
+    hanzi: lines.map((l) => l.hanzi).join(''),
+    pinyin: lines.flatMap((l) => l.pinyin).join(' '),
   });
-  it('keeps a Hanzi line (has CJK)', () => {
-    expect(isRomanizationLine('我6岁的时候', [])).toBe(false);
-    expect(isRomanizationLine('wǒ我', [])).toBe(false); // interleaved: pinyin is not a loose token
+
+  it('drops a long romanization row that duplicates the Hanzi reading', () => {
+    const rom = { hanzi: `${LQ}6suìdeshíhòuwǒ${RQ}`, pinyin: ['6'], loose: ['wǒ', 'suì', 'de', 'shí', 'hòu'] };
+    const han = { hanzi: `${LQ}我6岁的时候${RQ}`, pinyin: ['wǒ', '6', 'suì', 'de', 'shí', 'hòu'], loose: [] };
+    expect(join(selectSentenceLines([rom, han]))).toEqual({
+      hanzi: `${LQ}我6岁的时候${RQ}`,
+      pinyin: 'wǒ 6 suì de shí hòu',
+    });
   });
-  it('keeps a numeric/punctuation continuation line (no loose Latin tokens)', () => {
-    expect(isRomanizationLine('30', [])).toBe(false);
-    expect(isRomanizationLine('，。', [])).toBe(false);
+  it('drops a single-syllable romanization row that duplicates the Hanzi reading', () => {
+    // "6 suì" + newline + "6岁": the rom row is a duplicate reading -> dropped (no "66岁").
+    const rom = { hanzi: `${LQ}6suì${RQ}`, pinyin: ['6'], loose: ['suì'] };
+    const han = { hanzi: `${LQ}6岁${RQ}`, pinyin: ['6', 'suì'], loose: [] };
+    expect(join(selectSentenceLines([rom, han]))).toEqual({ hanzi: `${LQ}6岁${RQ}`, pinyin: '6 suì' });
   });
-  it('keeps a unit/identifier continuation line (loose Latin but not pinyin)', () => {
-    // "重量是" + newline + "3.5kg": the "3.5kg" token is not pinyin -> not romanization.
-    expect(isRomanizationLine('3.5kg', ['3.5kg'])).toBe(false);
+  it('keeps a numeric/unit continuation line whose reading matches no Hanzi row', () => {
+    // "长度是" + newline + "3.5" + loose "m": not a transliteration duplicate -> kept.
+    const han = { hanzi: '长度是', pinyin: ['cháng', 'dù', 'shì'], loose: [] };
+    const cont = { hanzi: '3.5m', pinyin: ['3.5'], loose: ['m'] };
+    expect(join(selectSentenceLines([han, cont]))).toEqual({
+      hanzi: '长度是3.5m',
+      pinyin: 'cháng dù shì 3.5',
+    });
   });
-  it('keeps a numeric continuation with a lone valid-pinyin unit ("m")', () => {
-    // "长度是" + newline + "3.5" + loose "m": isPinyin("m") is true, but a single
-    // loose token is not a transliteration row -> kept.
-    expect(isRomanizationLine('3.5m', ['m'])).toBe(false);
+  it('keeps a single interleaved line (no romanization row)', () => {
+    const only = { hanzi: '今天', pinyin: ['jīn', 'tiān'], loose: [] };
+    expect(selectSentenceLines([only])).toEqual([only]);
   });
 });
 

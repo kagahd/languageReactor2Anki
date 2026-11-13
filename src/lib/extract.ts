@@ -3,9 +3,9 @@ import {
   cjkCount,
   cleanTranslation,
   isGlossLine,
-  isRomanizationLine,
   keepHanzi,
   keepPinyin,
+  selectSentenceLines,
   splitGloss,
   splitPinyinTranslation,
   stripBlankPlaceholders,
@@ -13,6 +13,7 @@ import {
   trimEdgePunct,
 } from './sanitize';
 import { resegmentPinyin } from './resegment';
+import type { SubtitleLine } from './sanitize';
 import type { Meaning, Sentence, VideoSource, VocabCard } from './types';
 
 /** textContent, unsichtbare Zero-Width-Zeichen entfernt, Mehrfach-Whitespace zu
@@ -45,8 +46,8 @@ function readTokens(subText: Element): { hanzi: string; pinyin: string } {
   // line, separated by a `.lln-newline`. Collect tokens per line so a whole
   // romanization line can be dropped - otherwise a bare number in it (e.g. "6"
   // from "6岁") leaks into the Hanzi/Pinyin as a stray leading token.
-  const lines: Array<{ hanzi: string; pinyin: string[]; loose: string[] }> = [];
-  let cur: { hanzi: string; pinyin: string[]; loose: string[] } = { hanzi: '', pinyin: [], loose: [] };
+  const lines: SubtitleLine[] = [];
+  let cur: SubtitleLine = { hanzi: '', pinyin: [], loose: [] };
   const flush = () => {
     lines.push(cur);
     cur = { hanzi: '', pinyin: [], loose: [] };
@@ -80,12 +81,9 @@ function readTokens(subText: Element): { hanzi: string; pinyin: string } {
   });
   flush();
 
-  // Drop only lines positively identified as LR's separate romanization row
-  // (loose Latin tokens that are all pinyin, no CJK). A numeric/unit continuation
-  // line of a real sentence (e.g. "编号是" + newline + "30", or "3.5kg") is kept.
-  // Fall back to all lines if every line looked like romanization (defensive).
-  const kept = lines.filter((l) => !isRomanizationLine(l.hanzi, l.loose));
-  const use = kept.length ? kept : lines;
+  // Drop LR's separate romanization row (a transliteration duplicate of the
+  // Hanzi row); keep numeric/unit continuation lines. See selectSentenceLines.
+  const use = selectSentenceLines(lines);
   return {
     hanzi: use.map((l) => l.hanzi).join(''),
     pinyin: use.flatMap((l) => l.pinyin).join(' '),

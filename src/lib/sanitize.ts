@@ -50,23 +50,37 @@ export function cjkCount(s: string): number {
   return (s.match(/[㐀-鿿]/g) ?? []).length;
 }
 
+/** A tokenized subtitle line: concatenated Hanzi text, the per-word pinyin
+ *  syllables, and any loose pinyin tokens (standalone spans, not attached to a
+ *  Hanzi) LR renders on a separate romanization line. */
+export interface SubtitleLine {
+  hanzi: string;
+  pinyin: string[];
+  loose: string[];
+}
+
 /**
- * True if a subtitle line is pure romanization: it has NO CJK ideograph and its
- * loose Latin tokens (pinyin rendered as standalone spans, separate from any
- * Hanzi) are ALL pinyin syllables. LR sometimes renders such a line before the
- * Hanzi line; its tokens (e.g. a bare number like "6" from "6岁") would otherwise
- * leak into the sentence. A numeric/unit continuation line of a real sentence
- * ("30", "3.5kg") has no loose pinyin tokens - or non-pinyin ones - so it is
- * identified positively as pinyin rather than merely "Latin and no CJK".
+ * Selects the real sentence lines from LR's tokenized subtitle lines, dropping a
+ * romanization row LR sometimes renders before the Hanzi row. Rather than a
+ * fragile per-line heuristic, a line WITHOUT a CJK ideograph is dropped only
+ * when its reading (word pinyin + loose pinyin tokens, compared as a multiset)
+ * equals the reading of a CJK line in the same subtitle - i.e. it is a redundant
+ * transliteration of that Hanzi line. This keeps numeric/unit continuation lines
+ * ("30", "3.5 kg", "3.5 m") whose reading matches no Hanzi line, and removes the
+ * romanization row (and its stray tokens, e.g. a bare "6" from "6岁") in both the
+ * long and the single-syllable case. Falls back to all lines if every line would
+ * be dropped (defensive).
  */
-export function isRomanizationLine(lineHanzi: string, looseLatinTokens: string[]): boolean {
-  if (/[㐀-鿿]/u.test(lineHanzi)) return false;
-  // A real transliteration row has several pinyin syllables. Require >= 2 so a
-  // lone valid-pinyin unit token in a numeric continuation row ("3.5" + a loose
-  // "m" for metre, which isPinyin accepts as a nasal syllable) does not trigger
-  // a drop.
-  if (looseLatinTokens.length < 2) return false;
-  return looseLatinTokens.every((t) => isPinyin(t));
+export function selectSentenceLines(lines: SubtitleLine[]): SubtitleLine[] {
+  const hasCjk = (l: SubtitleLine) => /[㐀-鿿]/u.test(l.hanzi);
+  const readingKey = (l: SubtitleLine) => [...l.pinyin, ...l.loose].slice().sort().join('\u0001');
+  const cjkReadings = new Set(lines.filter((l) => hasCjk(l) && readingKey(l)).map(readingKey));
+  const kept = lines.filter((l) => {
+    if (hasCjk(l)) return true;
+    const k = readingKey(l);
+    return !(k && cjkReadings.has(k));
+  });
+  return kept.length ? kept : lines;
 }
 
 /**
