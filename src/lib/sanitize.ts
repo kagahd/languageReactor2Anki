@@ -19,9 +19,15 @@ export function stripInvisible(s: string): string {
   return s.replace(/[\u200B-\u200F\u2060]/g, '');
 }
 
-/** Behaelt nur CJK-Ideogramme und CJK-/Vollbreiten-Satzzeichen. */
+/**
+ * Behaelt nur CJK-Ideogramme, CJK-/Vollbreiten-Satzzeichen und ASCII-Ziffern.
+ * Ziffern bleiben erhalten, damit Zahlen im Satz (z.B. "30分钟之内") nicht aus dem
+ * Hanzi-Feld fallen, waehrend Pinyin/Uebersetzung sie behalten. Das stoert die
+ * Silbenzaehlung nicht (cjkCount zaehlt nur Ideogramme). Vollbreiten-Ziffern
+ * (０-９) lagen schon im Vollbreiten-Bereich und blieben ohnehin erhalten.
+ */
 export function keepHanzi(s: string): string {
-  return stripInvisible(s).replace(/[^㐀-鿿　-〿＀-￯]/g, '').trim();
+  return stripInvisible(s).replace(/[^0-9㐀-鿿　-〿＀-￯]/g, '').trim();
 }
 
 /** Entfernt CJK-Zeichen (laesst Latein/Pinyin/Toene stehen). */
@@ -35,6 +41,15 @@ export function keepPinyin(s: string): string {
 /** Anzahl CJK-Ideogramme (= erwartete Zahl Pinyin-Silben). */
 export function cjkCount(s: string): number {
   return (s.match(/[㐀-鿿]/g) ?? []).length;
+}
+
+/**
+ * A token made only of digits (plus optional separators), e.g. "30" or LR's
+ * split "3" / "0". In a romanization line these are part of the sentence reading,
+ * not the translation, and carry no pinyin syllable.
+ */
+export function isNumericToken(token: string): boolean {
+  return /\d/.test(token) && /^[\d.,:·]+$/u.test(token);
 }
 
 /** Sieht ein Token wie eine (klein geschriebene) Pinyin-Silbe aus? */
@@ -68,16 +83,33 @@ export function splitPinyinTranslation(
   const hasCount = hanziCount > 0;
   let n = 0;
   let syllables = 0;
+  let sawPinyin = false;
   while (n < words.length) {
     const w = words[n];
-    if (w === undefined || !isPinyin(w)) break;
+    if (w === undefined) break;
+    // Stop once the Hanzi syllable budget is reached, so a trailing number in
+    // the translation ("...von 30 Minuten") is not pulled into the pinyin.
+    if (hasCount && syllables >= hanziCount) break;
+    // A number written as digits (e.g. "30", or LR's split "3 0") belongs to the
+    // sentence reading, not the translation, and carries no pinyin syllable.
+    // Consume it transparently so it does not cut the pinyin prefix short.
+    if (isNumericToken(w)) {
+      n++;
+      continue;
+    }
+    if (!isPinyin(w)) break;
     if (hasCount) {
       const add = syllabify(w).length;
       if (syllables + add > hanziCount) break; // would overshoot the Hanzi count
       syllables += add;
     }
+    sawPinyin = true;
     n++;
   }
+  // If only numbers (and no real pinyin) were consumed, there is no pinyin
+  // prefix - leave those digits with the translation rather than mislabeling
+  // them as pinyin.
+  if (!sawPinyin) n = 0;
   return { pinyin: words.slice(0, n).join(' '), translation: words.slice(n).join(' ') };
 }
 
@@ -161,9 +193,15 @@ export function cleanTranslation(raw: string, pinyin: string): string {
  * separators (comma, enumeration comma, semicolon, colon - CJK and ASCII) are
  * removed, while a trailing terminator (。！？…) is kept. Punctuation INSIDE the
  * sentence always stays.
+ *
+ * A leading "digits + CJK punctuation" run is also an artifact: LR sometimes
+ * prepends a stray number cut off by CJK punctuation ("30，。30分钟之内…"). That is
+ * stripped too, but ONLY when the digits are followed by CJK punctuation - a
+ * real leading number sits directly before a Hanzi (30分钟) or, in a translation,
+ * before a space/ASCII ("30 Minuten"), so it is left untouched.
  */
 export function trimEdgePunct(s: string): string {
   return s
-    .replace(/^[\s，。、；：！？…·,.;:!?]+/u, '')
+    .replace(/^(?:[\s，。、；：！？…·,.;:!?]+|\d+[，。、；：！？…·]+)+/u, '')
     .replace(/[\s，、；：,;:]+$/u, '');
 }

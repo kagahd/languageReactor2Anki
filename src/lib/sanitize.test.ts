@@ -3,6 +3,7 @@ import {
   cjkCount,
   cleanTranslation,
   isGlossLine,
+  isNumericToken,
   keepHanzi,
   keepPinyin,
   looksLikePinyin,
@@ -34,6 +35,10 @@ describe('keepHanzi', () => {
   it('keeps Chinese punctuation', () => {
     expect(keepHanzi('他仍是个商业新手。')).toBe('他仍是个商业新手。');
   });
+  it('keeps ASCII digits in the sentence (e.g. 30分钟) while dropping pinyin', () => {
+    // Pinyin contamination is stripped, but the Arabic number stays with the Hanzi.
+    expect(keepHanzi('sān shí fēn zhōng 30分钟之内')).toBe('30分钟之内');
+  });
 });
 
 describe('keepPinyin', () => {
@@ -64,6 +69,20 @@ describe('looksLikePinyin', () => {
   it('rejects punctuation-only tokens', () => {
     expect(looksLikePinyin('，')).toBe(false);
     expect(looksLikePinyin('.')).toBe(false);
+  });
+});
+
+describe('isNumericToken', () => {
+  it('recognizes digit tokens (with optional separators)', () => {
+    expect(isNumericToken('3')).toBe(true);
+    expect(isNumericToken('30')).toBe(true);
+    expect(isNumericToken('3,')).toBe(true);
+    expect(isNumericToken('3.5')).toBe(true);
+  });
+  it('rejects non-numeric tokens', () => {
+    expect(isNumericToken('shī')).toBe(false);
+    expect(isNumericToken('3rd')).toBe(false);
+    expect(isNumericToken(',')).toBe(false);
   });
 });
 
@@ -127,6 +146,21 @@ describe('splitPinyinTranslation', () => {
     const r = splitPinyinTranslation(line, 12);
     expect(r.pinyin).toBe('hái zi yǒu le zì jǐ de hái zi de shí hòu');
     expect(r.translation).toBe('Wenn das Kind selbst ein Kind hat');
+  });
+  it('consumes a leading number (digits) as part of the pinyin, not the translation', () => {
+    // 师傅 card: LR writes "30" as "3 0" at the start of the reading. 分钟之内安装
+    // 空调的师傅就来了 = 14 Hanzi. The digits must not cut the pinyin to empty.
+    const r = splitPinyinTranslation(
+      '3 0 fēn zhōng zhī nèi, ān zhuāng kōng tiáo de shī fu jiù lái le. Der Klimaanlagenmonteur traf innerhalb von 30 Minuten ein.',
+      14,
+    );
+    expect(r.pinyin).toBe('3 0 fēn zhōng zhī nèi, ān zhuāng kōng tiáo de shī fu jiù lái le.');
+    expect(r.translation).toBe('Der Klimaanlagenmonteur traf innerhalb von 30 Minuten ein.');
+  });
+  it('does not label a leading number as pinyin when no pinyin follows', () => {
+    const r = splitPinyinTranslation('30 minutes later.', 0);
+    expect(r.pinyin).toBe('');
+    expect(r.translation).toBe('30 minutes later.');
   });
   it('treats U+FEFF as a separator, not a character to delete', () => {
     // Regression: U+FEFF matches \s in JS, so it must stay and be normalized to a
@@ -236,6 +270,17 @@ describe('trimEdgePunct', () => {
   });
   it('leaves clean text untouched', () => {
     expect(trimEdgePunct('两天前我见了一个好朋友')).toBe('两天前我见了一个好朋友');
+  });
+  it('strips a leading "digits + CJK punctuation" artifact but keeps a real leading number', () => {
+    // 师傅 card: LR prepended a stray "30，。" before the real sentence.
+    expect(trimEdgePunct('30，。30分钟之内，安装空调的师傅就来了。')).toBe(
+      '30分钟之内，安装空调的师傅就来了。',
+    );
+    // A real leading number directly before a Hanzi is kept.
+    expect(trimEdgePunct('30分钟之内')).toBe('30分钟之内');
+    // A translation starting with a number (digit + space/ASCII) is untouched.
+    expect(trimEdgePunct('30 Minuten später.')).toBe('30 Minuten später.');
+    expect(trimEdgePunct('3. Platz gewonnen.')).toBe('3. Platz gewonnen.');
   });
   it('strips a leading sentence-final period that leaked to the translation start', () => {
     expect(trimEdgePunct('. Mir ist das peinlich.')).toBe('Mir ist das peinlich.');
