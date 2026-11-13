@@ -6,9 +6,14 @@ import {
   keepPinyin,
   looksLikePinyin,
   splitPinyinTranslation,
+  stripBlankPlaceholders,
   stripInvisible,
   trimEdgePunct,
 } from './sanitize';
+
+// CJK/"smart" double quotes LR wraps around a word's pinyin gloss.
+const LQ = String.fromCharCode(0x201c); // “
+const RQ = String.fromCharCode(0x201d); // ”
 
 // Zero-width space LR mixes between syllables (it does not match \s).
 const ZWSP = String.fromCharCode(0x200b); // U+200B ZERO WIDTH SPACE
@@ -89,6 +94,31 @@ describe('splitPinyinTranslation', () => {
     expect(r.pinyin).toBe('wǒ depín dào');
     expect(r.translation).toBe('');
   });
+  it('peels CJK quotes that wrap a pinyin gloss (quotes glued to tokens)', () => {
+    // LR: “shàng gè yuè” "letzten Monat"  (上个月, 3 Hanzi)
+    const r = splitPinyinTranslation(`${LQ}shàng gè yuè${RQ} "letzten Monat"`, 3);
+    expect(r.pinyin).toBe('shàng gè yuè');
+    expect(r.translation).toBe('"letzten Monat"');
+  });
+  it('skips standalone quote tokens in the pinyin region', () => {
+    // LR: “ qù nián ” huò zhě "Letztes Jahr" oder  (去年或者, 4 Hanzi)
+    const r = splitPinyinTranslation(`${LQ} qù nián ${RQ} huò zhě "Letztes Jahr" oder`, 4);
+    expect(r.pinyin).toBe('qù nián huò zhě');
+    expect(r.translation).toBe('"Letztes Jahr" oder');
+  });
+  it('never strips quotes from the translation (any language)', () => {
+    // fancy quotes AFTER the pinyin belong to the translation and must stay
+    const r = splitPinyinTranslation(`wǒ shì ${LQ} hello ${RQ} world`, 2);
+    expect(r.pinyin).toBe('wǒ shì');
+    expect(r.translation).toBe(`${LQ} hello ${RQ} world`);
+  });
+  it('keeps a translation quote even if the next word is pinyin-segmentable', () => {
+    // after the Hanzi count (2) is reached, a quote belongs to the translation;
+    // "die" happens to segment as di+e but must NOT be eaten as pinyin.
+    const r = splitPinyinTranslation(`wǒ shì ${LQ} die Katze`, 2);
+    expect(r.pinyin).toBe('wǒ shì');
+    expect(r.translation).toBe(`${LQ} die Katze`);
+  });
   it('stops at the Hanzi syllable count with a glued token + lowercase translation', () => {
     // 8 Hanzi, "depín" is one token = two syllables, translation starts lowercase.
     const r = splitPinyinTranslation('huān yíng lái dào wǒ depín dào welcome to my channel.', 8);
@@ -134,6 +164,13 @@ describe('stripInvisible', () => {
   });
 });
 
+describe('stripBlankPlaceholders', () => {
+  it('removes a blanked-word placeholder but keeps real bracketed content', () => {
+    expect(stripBlankPlaceholders('wǒ xǐ [ __ ] de').replace(/\s+/g, ' ').trim()).toBe('wǒ xǐ de');
+    expect(stripBlankPlaceholders('[note] stays')).toBe('[note] stays');
+  });
+});
+
 describe('trimEdgePunct', () => {
   it('strips leading punctuation and a dangling trailing separator', () => {
     expect(trimEdgePunct('，，两天前，我见了一个好朋友，')).toBe('两天前，我见了一个好朋友');
@@ -147,6 +184,10 @@ describe('trimEdgePunct', () => {
   });
   it('leaves clean text untouched', () => {
     expect(trimEdgePunct('两天前我见了一个好朋友')).toBe('两天前我见了一个好朋友');
+  });
+  it('strips a leading sentence-final period that leaked to the translation start', () => {
+    expect(trimEdgePunct('. Mir ist das peinlich.')).toBe('Mir ist das peinlich.');
+    expect(trimEdgePunct('。 Ich habe mich verändert.')).toBe('Ich habe mich verändert.');
   });
   it('keeps opening/closing quotes and brackets (only separators are trimmed)', () => {
     expect(trimEdgePunct('「你好」')).toBe('「你好」');

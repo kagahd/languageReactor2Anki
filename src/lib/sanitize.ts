@@ -64,21 +64,50 @@ export function splitPinyinTranslation(
   // out of the pinyin. Without a Hanzi count there is no syllable target, so
   // fall back to consuming every leading pinyin-looking token.
   const hasCount = hanziCount > 0;
-  let n = 0;
+  const pinyin: string[] = [];
   let syllables = 0;
-  while (n < words.length) {
-    const w = words[n];
+  let i = 0;
+  // Edge CJK/"smart" quotes (LR wraps a word's pinyin gloss in “…”). Peeled only
+  // in the PINYIN region and kept out of the pinyin output; the translation is
+  // never touched, so real quotes in any translation language stay intact.
+  const peel = (w: string) => w.replace(/^[\u201C\u201D\u2018\u2019]+|[\u201C\u201D\u2018\u2019]+$/gu, '');
+  for (; i < words.length; i++) {
+    const w = words[i];
+    if (w === undefined) break;
+    const token = peel(w);
+    if (token === '') {
+      // Standalone gloss quote: skip it only while pinyin is still expected
+      // (more pinyin follows AND the Hanzi count is not yet reached). Otherwise
+      // it belongs to the translation and must be kept there - this guards
+      // against eating a translation's opening quote when the next word happens
+      // to be pinyin-segmentable (e.g. German "die" = di+e).
+      const moreExpected = !hasCount || syllables < hanziCount;
+      const next = peel(words[i + 1] ?? '');
+      if (moreExpected && next !== '' && isPinyin(next)) continue;
+      break;
+    }
     // isPinyin requires the token to be segmentable into real syllables, so a
     // lowercase translation word (e.g. "welcome") is not mistaken for pinyin.
-    if (w === undefined || !isPinyin(w)) break;
+    if (!isPinyin(token)) break;
     if (hasCount) {
-      const add = syllabify(w).length;
+      const add = syllabify(token).length;
       if (syllables + add > hanziCount) break; // would overshoot the Hanzi count
       syllables += add;
     }
-    n++;
+    pinyin.push(token);
   }
-  return { pinyin: words.slice(0, n).join(' '), translation: words.slice(n).join(' ') };
+  return { pinyin: pinyin.join(' '), translation: words.slice(i).join(' ') };
+}
+
+/**
+ * Removes LR's blanked-word placeholder ("[ __ ]") from the romanization line
+ * before the pinyin/translation split - otherwise the "[" token is not pinyin,
+ * the split stops there and spills the rest into the translation. Only brackets
+ * containing nothing but whitespace/underscores are removed, so real bracketed
+ * content (e.g. "[note]") is left untouched.
+ */
+export function stripBlankPlaceholders(s: string): string {
+  return s.replace(/\[[\s_]*\]/g, ' ');
 }
 
 /** Schneidet fuehrende CJK und fuehrende Pinyin-Silben (die des Satzes) ab. */

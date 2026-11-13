@@ -5,6 +5,7 @@ import {
   keepHanzi,
   keepPinyin,
   splitPinyinTranslation,
+  stripBlankPlaceholders,
   stripInvisible,
   trimEdgePunct,
 } from './sanitize';
@@ -65,7 +66,8 @@ function readTokens(subText: Element): { hanzi: string; pinyin: string } {
 
 function extractSentence(root: ParentNode): Sentence | null {
   const subText = root.querySelector(SEL.subtitleText);
-  const rawLine = txt(root.querySelector(SEL.sentenceTranslation));
+  // Drop LR's blanked-word placeholder ("[ __ ]") before splitting pinyin/translation.
+  const rawLine = stripBlankPlaceholders(txt(root.querySelector(SEL.sentenceTranslation)));
   const tokens = subText ? readTokens(subText) : { hanzi: '', pinyin: '' };
 
   // trimEdgePunct: LR's subtitle tokens can carry leading punctuation from a
@@ -81,7 +83,9 @@ function extractSentence(root: ParentNode): Sentence | null {
   // LR klebt in der Romanisierung manchmal Silben zusammen ("depin" statt "de pin").
   // Nur anwenden, wenn die Resegmentierung exakt die Hanzi-Silbenzahl trifft.
   const pinyin = trimEdgePunct(resegmentPinyin(rawPinyin, syllableCount) ?? rawPinyin);
-  const translation = split.translation || cleanTranslation(rawLine, translitPinyin);
+  // Also trim the translation: LR's sentence-final period can arrive as a
+  // separate token and land at the START of the translation ("。/. Mir ist…").
+  const translation = trimEdgePunct(split.translation || cleanTranslation(rawLine, translitPinyin));
 
   if (!hanzi && !translation) return null;
   return { hanzi, pinyin, translation };
