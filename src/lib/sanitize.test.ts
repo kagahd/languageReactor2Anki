@@ -6,7 +6,7 @@ import {
   keepHanzi,
   keepPinyin,
   looksLikePinyin,
-  parseGloss,
+  splitGloss,
   splitPinyinTranslation,
   stripBlankPlaceholders,
   stripInvisible,
@@ -165,30 +165,32 @@ describe('isGlossLine', () => {
   });
 });
 
-describe('parseGloss', () => {
+describe('splitGloss', () => {
   it('extracts the inner pinyin and the trailing translation', () => {
-    // 一周前: “yì zhōu qián” Vor einer Woche
-    expect(parseGloss(`${LQ}yì zhōu qián${RQ} Vor einer Woche`)).toEqual({
+    // 一周前: “yì zhōu qián” Vor einer Woche (3 Hanzi)
+    expect(splitGloss(`${LQ}yì zhōu qián${RQ} Vor einer Woche`, 3)).toEqual({
       pinyin: 'yì zhōu qián',
       translation: 'Vor einer Woche',
     });
-    // 上个月: “shàng gè yuè” "letzten Monat"
-    expect(parseGloss(`${LQ}shàng gè yuè${RQ} "letzten Monat"`)).toEqual({
+    // 上个月: “shàng gè yuè” "letzten Monat" (3 Hanzi)
+    expect(splitGloss(`${LQ}shàng gè yuè${RQ} "letzten Monat"`, 3)).toEqual({
       pinyin: 'shàng gè yuè',
       translation: '"letzten Monat"',
     });
   });
-  it('handles spaces inside the quotes and content after the gloss', () => {
-    // 去年或者: “ qù nián ” huò zhě "Letztes Jahr" oder
-    expect(parseGloss(`${LQ} qù nián ${RQ} huò zhě "Letztes Jahr" oder`)).toEqual({
-      pinyin: 'qù nián',
-      translation: 'huò zhě "Letztes Jahr" oder',
+  it('recovers full pinyin when LR glues a second word onto the gloss', () => {
+    // 去年或者: “ qù nián ” huò zhě "Letztes Jahr" oder (4 Hanzi). Stripping the
+    // quote markers lets the syllable-count split keep all four pinyin syllables
+    // and leave a clean translation, instead of cutting pinyin at the quote.
+    expect(splitGloss(`${LQ} qù nián ${RQ} huò zhě "Letztes Jahr" oder`, 4)).toEqual({
+      pinyin: 'qù nián huò zhě',
+      translation: '"Letztes Jahr" oder',
     });
   });
-  it('returns empty fields when there is no closing quote', () => {
-    expect(parseGloss(`${LQ}yì zhōu qián Vor einer Woche`)).toEqual({
-      pinyin: '',
-      translation: '',
+  it('keeps straight quotes in the translation (only gloss markers are removed)', () => {
+    expect(splitGloss(`${LQ}hǎo${RQ} "gut"`, 1)).toEqual({
+      pinyin: 'hǎo',
+      translation: '"gut"',
     });
   });
 });

@@ -85,8 +85,8 @@ export function splitPinyinTranslation(
  * True if the romanization line is an LR word-gloss rather than a sentence
  * translation: LR wraps a looked-up word's pinyin in CJK/"smart" quotes and the
  * line starts with the opening quote (e.g. “shàng gè yuè” "letzten Monat"). The
- * caller then uses parseGloss() to take the pinyin from inside the quotes and
- * the translation from after them, instead of the normal sentence split.
+ * caller then uses splitGloss() to strip the quote markers and run the normal
+ * syllable-count split, instead of the plain sentence split.
  */
 export function isGlossLine(line: string): boolean {
   // Must open with a CJK/"smart" quote AND wrap pinyin - the first token after
@@ -103,14 +103,19 @@ export function isGlossLine(line: string): boolean {
 }
 
 /**
- * Parses an LR word-gloss line "“ <pinyin> ” <translation>" into its inner
- * pinyin (from between the quotes) and the trailing translation (after the
- * closing quote). Only meaningful for a line where isGlossLine(line) is true.
+ * Extracts pinyin + translation from an LR word-gloss line by removing the gloss
+ * quote markers and running the normal syllable-count split. LR writes these
+ * lines messily - e.g. a two-word subtitle comes as "<q>qu nian<q> huo zhe \"X\" ...",
+ * gluing the second word's pinyin and the gloss together. Stripping the markers
+ * yields a plain line the split can separate into full pinyin and a clean
+ * translation. Only the gloss markers are removed, so straight quotes in the
+ * translation are preserved.
  */
-export function parseGloss(line: string): { pinyin: string; translation: string } {
-  const m = /^\s*[\u201C\u2018]\s*([^\u201D\u2019]*)[\u201D\u2019]\s*(.*)$/u.exec(line);
-  if (!m) return { pinyin: '', translation: '' };
-  return { pinyin: (m[1] ?? '').trim(), translation: (m[2] ?? '').trim() };
+export function splitGloss(
+  line: string,
+  hanziCount: number,
+): { pinyin: string; translation: string } {
+  return splitPinyinTranslation(line.replace(/[\u201C\u201D\u2018\u2019]/gu, ''), hanziCount);
 }
 
 /**

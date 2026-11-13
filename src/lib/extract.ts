@@ -4,8 +4,8 @@ import {
   cleanTranslation,
   isGlossLine,
   keepHanzi,
-  parseGloss,
   keepPinyin,
+  splitGloss,
   splitPinyinTranslation,
   stripBlankPlaceholders,
   stripInvisible,
@@ -86,10 +86,12 @@ function extractSentence(root: ParentNode): Sentence | null {
   let rawPinyin: string;
   let rawTranslation: string;
   if (isGlossLine(rawLine)) {
-    // LR shows a word-gloss "“<pinyin>” <translation>". Take the pinyin from
-    // inside the quotes and the translation from after them - the subtitle
-    // translit is often incomplete for these lines.
-    const g = parseGloss(rawLine);
+    // LR shows a word-gloss "“<pinyin>” <translation>". Strip the gloss quote
+    // markers and run the normal syllable-count split: LR writes these lines
+    // messily (gluing a second word's pinyin to the gloss), so parsing the
+    // quotes directly loses pinyin - the subtitle translit is often incomplete
+    // too.
+    const g = splitGloss(rawLine, syllableCount);
     rawPinyin = g.pinyin || translitPinyin;
     rawTranslation = g.translation;
   } else if (syllableCount > 0 && blankCount >= syllableCount) {
